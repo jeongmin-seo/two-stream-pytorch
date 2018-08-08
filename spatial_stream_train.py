@@ -13,7 +13,7 @@ import hmdb51
 
 data_root = "/home/jm/Two-stream_data/HMDB51/preprocess/frames"
 txt_root = "/home/jm/Two-stream_data/HMDB51"
-batch_size = 128
+batch_size = 32
 
 
 def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
@@ -31,7 +31,7 @@ def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epoc
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(output.data, label, topk=(1, 5))
-        print('Top1:', prec1, 'Top5:', prec5)
+        # print('Top1:', prec1, 'Top5:', prec5)
 
         # compute gradient and do SGD step
         _optimizer.zero_grad()
