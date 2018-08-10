@@ -2,12 +2,23 @@ import random
 import os
 import cv2
 import re
+from PIL import Image
+import re
+from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms as transforms
+import torchvision.models as models
+import torch.nn as nn
+import torch
+import torch.backends.cudnn as cudnn
+from torch.autograd import Variable
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 class motion_dataset(Dataset):
     def __init__(self, dic, in_channel, root_dir, mode, transform=None):
         # Generate a 16 Frame clip
-        self.keys = dic.keys()
-        self.values = dic.values()
+        self.keys = list(dic.keys())
+        self.values = list(dic.values())
+        self.dic = dic
         self.root_dir = root_dir
         self.transform = transform
         self.mode = mode
@@ -17,9 +28,6 @@ class motion_dataset(Dataset):
 
     def stackopf(self, keys):
         video_path = os.path.join(self.root_dir, keys)
-        # name = 'v_' + self.video
-        # u = self.root_dir + 'u/' + name
-        # v = self.root_dir + 'v/' + name
 
         flow = torch.FloatTensor(2 * self.in_channel, self.img_rows, self.img_cols)
         i = int(self.clips_idx)
@@ -50,7 +58,8 @@ class motion_dataset(Dataset):
         # print ('mode:',self.mode,'calling Dataset:__getitem__ @ idx=%d'%idx)
         cur_key = self.keys[idx]
         if self.mode == 'train':
-            nb_frame = self.values[cur_key][0]
+            # nb_frame = self.values[cur_key][0]
+            nb_frame = self.dic[cur_key][0]
             self.clips_idx = random.randint(1, int(nb_frame))
             self.video = cur_key.split('/')[0]
         elif self.mode == 'val':
@@ -59,7 +68,8 @@ class motion_dataset(Dataset):
         else:
             raise ValueError('There are only train and val mode')
 
-        label = self.values[cur_key][1]
+        # label = self.values[cur_key][1]
+        label = self.dic[cur_key][1]
         data = self.stackopf(cur_key)
 
         if self.mode == 'train':

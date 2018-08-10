@@ -1,18 +1,21 @@
 import random
 import os
 import cv2
+from PIL import Image
 import re
+from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms as transforms
 
 
 class spatial_dataset(Dataset):
-    def __init__(self, dic, in_channel, root_dir, mode, transform=None):
+    def __init__(self, dic, root_dir, mode, transform=None):
         # Generate a 16 Frame clip
-        self.keys = dic.keys()
-        self.values = dic.values()
+        self.keys = list(dic.keys())
+        self.values = list(dic.values())
+        self.dic = dic
         self.root_dir = root_dir
         self.transform = transform
         self.mode = mode
-        self.in_channel = in_channel
         self.img_rows = 224
         self.img_cols = 224
 
@@ -23,7 +26,8 @@ class spatial_dataset(Dataset):
         # print ('mode:',self.mode,'calling Dataset:__getitem__ @ idx=%d'%idx)
         cur_key = self.keys[idx]
         if self.mode == 'train':
-            nb_frame = self.values[cur_key][0]
+            # nb_frame = self.values[cur_key][0]
+            nb_frame = self.dic[cur_key][0]
             self.clips_idx = random.randint(1, int(nb_frame))
         elif self.mode == 'val':
             self.video = cur_key.split('/')[0]
@@ -31,12 +35,16 @@ class spatial_dataset(Dataset):
         else:
             raise ValueError('There are only train and val mode')
 
-        label = self.values[cur_key][1]
+        #label = self.values[cur_key][1]
+        label = self.dic[cur_key][1]
         data_root = os.path.join(self.root_dir, self.keys[idx])
         cur_data_list = os.listdir(data_root)
 
         data_path = os.path.join(data_root, cur_data_list[self.clips_idx-1])
-        data = cv2.imread(data_path)
+        data = Image.open(data_path)
+
+        if self.transform:
+            data = self.transform(data)
 
         if self.mode == 'train':
             sample = (data, label)
@@ -48,12 +56,10 @@ class spatial_dataset(Dataset):
 
 
 class Spatial_DataLoader():
-    def __init__(self, BATCH_SIZE, num_workers, in_channel, path, txt_path, split_num):
+    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num):
 
         self.BATCH_SIZE = BATCH_SIZE
         self.num_workers = num_workers
-        # self.frame_count = {}
-        self.in_channel = in_channel
         self.data_path = path
         self.text_path = txt_path
         self.split_num = split_num
@@ -99,14 +105,15 @@ class Spatial_DataLoader():
                 self.dic_test_idx[key] = self.test_video[video]
 
     def train(self):
-        training_set = motion_dataset(dic=self.train_video, in_channel=self.in_channel, root_dir=self.data_path,
-                                      mode='train',
-                                      transform=transforms.Compose([
-                                          transforms.RandomCrop(224),
-                                          transforms.RandomHorizontalFlip(),
-                                          transforms.ToTensor(),
-                                          transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                      ]))
+        training_set = spatial_dataset(dic=self.train_video,
+                                       root_dir=self.data_path,
+                                       mode='train',
+                                       transform=transforms.Compose([
+                                           transforms.RandomCrop(224),
+                                           transforms.RandomHorizontalFlip(),
+                                           transforms.ToTensor(),
+                                           transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                       ]))
         print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
         train_loader = DataLoader(
@@ -120,13 +127,14 @@ class Spatial_DataLoader():
         return train_loader
 
     def val(self):
-        validation_set = motion_dataset(dic=self.dic_test_idx, in_channel=self.in_channel, root_dir=self.data_path,
-                                        mode='val',
-                                        transform=transforms.Compose([
-                                            transforms.Scale([224, 224]),
-                                            transforms.ToTensor(),
-                                            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                        ]))
+        validation_set = spatial_dataset(dic=self.dic_test_idx,
+                                         root_dir=self.data_path,
+                                         mode='val',
+                                         transform=transforms.Compose([
+                                             transforms.Scale([224, 224]),
+                                             transforms.ToTensor(),
+                                             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                         ]))
         print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
         # print validation_set[1]
 

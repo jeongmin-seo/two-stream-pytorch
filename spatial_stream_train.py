@@ -9,9 +9,9 @@ from torch.utils.data import DataLoader
 from network import Net
 from util import accuracy, AverageMeter
 
-import hmdb51
+import spatial_dataloader as data_loader
 
-data_root = "/home/jm/Two-stream_data/HMDB51/preprocess/frames"
+data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
 txt_root = "/home/jm/Two-stream_data/HMDB51"
 batch_size = 32
 
@@ -31,7 +31,7 @@ def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epoc
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(output.data, label, topk=(1, 5))
-        # print('Top1:', prec1, 'Top5:', prec5)
+        print('Top1:', prec1, 'Top5:', prec5)
 
         # compute gradient and do SGD step
         _optimizer.zero_grad()
@@ -42,28 +42,11 @@ def val_1epoch(_model, _val_loader):
     _model.eval()
 
 def main():
-    training_set = hmdb51.HMDB(data_root, txt_root, 'train', 1,
-                                 transform=transforms.Compose([
-                                 transforms.ToPILImage(),
-                                 transforms.Scale([224,224]),
-                                 transforms.RandomHorizontalFlip(),
-                                 transforms.ToTensor()
-                                 ]))
-    validation_set = hmdb51.HMDB(data_root, txt_root, 'test', 1,
-                                transform=transforms.Compose([
-                                transforms.ToPILImage(),
-                                transforms.Scale([224,224]),
-                                transforms.RandomHorizontalFlip(),
-                                transforms.ToTensor()
-                                ]))
-    train_loader = DataLoader(dataset=training_set,
-                              batch_size=batch_size,
-                              shuffle=True
-                              )
-    val_loader = DataLoader(dataset=validation_set,
-                            batch_size=batch_size,
-                            shuffle=False)
 
+    loader = data_loader.Spatial_DataLoader(BATCH_SIZE=batch_size, num_workers=8,
+                                            path=data_root, txt_path=txt_root, split_num=1)
+
+    train_loader, test_loader, test_video = loader.run()
     model = Net().cuda(device=0)
     criterion = nn.CrossEntropyLoss().cuda()
     optimizer = torch.optim.SGD(model.parameters(), 0.001, momentum=0.9)
