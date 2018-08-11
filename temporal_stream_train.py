@@ -1,145 +1,120 @@
-########################################
-#     import requirement libraries     #
-########################################
-from keras.backend import set_session
-from keras.optimizers import SGD
-import os
+import torch
+import torch.nn as nn
+from torch.autograd import Variable
+from network import Net
+from util import accuracy, frame2_video_level_accuracy, save_best_model
+import pickle
+import visdom
+import numpy as np
 
-# custom module
-import data_loader
-import network
-from util import write_log, train_1epoch, validation_1epoch, save_best_model
+import temporal_dataloader as data_loader
 
-# set the quantity of GPU memory consumed
-import tensorflow as tf
-config = tf.ConfigProto()
-# use GPU memory in the available GPU memory capacity
-config.gpu_options.allow_growth = True
-sess = tf.Session(config=config)
-set_session(sess)
-
-# using pretrained model
-pretrained_model_name = ''
-using_pretrained_model = False
-save_model_path = '/home/jm/workspace/Two-stream/flow_model'
-num_epoch = 100
-batch_size = 64
-
-#########################################################
-#                     CallBack  setup                   #
-#########################################################
-from keras.callbacks import TensorBoard, ModelCheckpoint
-tbCallBack = TensorBoard(log_dir='./Graph', histogram_freq=0, write_graph=True, write_images=True)
-# mcCallBack = ModelCheckpoint('./flow_result/{epoch:0}')
+data_root = "/home/jeongmin/workspace/data/HMDB51/flow"
+txt_root = "/home/jeongmin/workspace/data/HMDB51"
+model_path = "/home/jeongmin/workspace/github/two-stream-pytorch/temporal_model"
+batch_size = 128
+nb_epoch = 10000
+L = 10
 
 
-"""
-pytorch code
-def cross_modality_pretrain(conv1_weight, channel):
-    # transform the original 3 channel weight to "channel" channel
-    S=0
-    for i in range(3):
-        S += conv1_weight[:,i,:,:]
-    avg = S/3.
-    new_conv1_weight = torch.FloatTensor(64,channel,7,7)
-    #print type(avg),type(new_conv1_weight)
-    for i in range(channel):
-        new_conv1_weight[:,i,:,:] = avg.data
-    return new_conv1_weight
+def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
+    print('==> Epoch:[{0}/{1}][training stage]'.format(_epoch, _nb_epochs))
 
-def weight_transform(model_dict, pretrain_dict, channel):
-    weight_dict  = {k:v for k, v in pretrain_dict.items() if k in model_dict}
-    #print pretrain_dict.keys()
-    w3 = pretrain_dict['conv1.weight']
-    #print type(w3)
-    if channel == 3:
-        wt = w3
-    else:
-        wt = cross_modality_pretrain(w3,channel)
+    accuracy_list = []
+    loss_list = []
+    _model.train()
+    for i, (data, label) in enumerate(_train_loader):
 
-    weight_dict['conv1_custom.weight'] = wt
-    model_dict.update(weight_dict)
-    return model_dict
-"""
+        label = label.cuda(async=True)
+        input_var = Variable(data).cuda()
+        target_var = Variable(label).cuda().long()
+
+        output = _model(input_var)
+        loss = _loss_func(output, target_var)
+        loss_list.append(loss)
+
+        # measure accuracy and record loss
+        prec1 = accuracy(output.data, label)
+        accuracy_list.append(prec1)
+
+        # compute gradient and do SGD step
+        _optimizer.zero_grad()
+        loss.backward()
+        _optimizer.step()
+
+    return float(sum(accuracy_list)/len(accuracy_list)), float(sum(loss_list)/len(loss_list)), _model
 
 
+def val_1epoch(_model, _val_loader, _criterion, _epoch, _nb_epochs):
+    print('==> Epoch:[{0}/{1}][validation stage]'.format(_epoch, _nb_epochs))
 
-"""
-class AccuracyHistory(keras.callbacks.Callback):
-    def on_train_begin(self, logs={}):
-        self.acc = []
+    dic_video_level_preds = {}
+    dic_video_level_targets = {}
+    _model.eval()
+    for i, (video, data, label) in enumerate(_val_loader):
 
-    def on_epoch_end(self, batch, logs={}):
-        self.acc.append(logs.get('acc'))
+        label = label.cuda(async=True)
+        input_var = Variable(data, volatile=True).cuda(async=True)
+        target_var = Variable(label, volatile=True).cuda(async=True)
+
+        # compute output
+        output = _model(input_var)
+
+        # Calculate video level prediction
+        preds = output.data.cpu().numpy()
+        nb_data = preds.shape[0]
+        for j in range(nb_data):
+            videoName = video[j]
+            if videoName not in dic_video_level_preds.keys():
+                dic_video_level_preds[videoName] = preds[j, :]
+                dic_video_level_targets[videoName] = target_var[j]
+            else:
+                dic_video_level_preds[videoName] += preds[j, :]
+
+    video_acc, video_loss = frame2_video_level_accuracy(dic_video_level_preds, dic_video_level_targets, _criterion)
+
+    return video_acc, video_loss, dic_video_level_preds
 
 
-history = AccuracyHistory()
-"""
+def main():
+
+    vis = visdom.Visdom()
+    loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
+    acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
+
+    loader = data_loader.Motion_DataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
+                                           path=data_root, txt_path=txt_root, split_num=1)
+
+    train_loader, test_loader, test_video = loader.run()
+    model = Net(channel=L).cuda(device=0)
+
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = torch.optim.SGD(model.parameters(), 0.01, momentum=0.9)
+    cur_best_acc = 0
+    for epoch in range(1, nb_epoch+1):
+        train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
+        print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
+        val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, nb_epoch)
+        print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
+
+        is_best = val_acc > cur_best_acc
+        if is_best:
+            cur_best_acc = val_acc
+            with open('./pred/spatial_video_preds.pickle','wb') as f:
+                pickle.dump(video_level_pred, f)
+            f.close()
+
+        vis.line(X=np.asarray([epoch]), Y=np.asarray([val_loss]),
+                 win=loss_plot, update="append", name='Validation Loss')
+        vis.line(X=np.asarray([epoch]), Y=np.asarray([val_acc]),
+                 win=acc_plot, update="append", name="Validation Accuracy")
+        save_best_model(is_best, model, model_path, epoch)
+
+
 if __name__ == '__main__':
+    main()
 
-    #####################################################
-    #     import requirement data using data loader     #
-    #####################################################
-    # HMDB-51 data loader
-    root = '/home/jeongmin/workspace/data/HMDB51/preprocess/flow'
-    train_txt_root = '/home/jm/Two-stream_data/HMDB51/train_split1.txt'
-    test_txt_root = '/home/jm/Two-stream_data/HMDB51/test_split1.txt'
 
-    train_loader = data_loader.DataLoader(root, batch_size=batch_size)
-    train_loader.set_data_list(train_txt_root, train_test_type='train')
-
-    train_val_loader = data_loader.DataLoader(root, batch_size=batch_size)
-    train_val_loader.set_data_list(train_txt_root, train_test_type='test')
-
-    test_loader = data_loader.DataLoader(root)
-    test_loader.set_data_list(test_txt_root, train_test_type='test')
-
-    print('complete setting data list')
-
-    temporal = network.Temporal()
-    #####################################################
-    #     set convolution neural network structure      #
-    #####################################################
-    if using_pretrained_model:
-        start_epoch_num = int(pretrained_model_name.split('_')[0]) + 1
-        load_model_path = os.path.join(save_model_path, pretrained_model_name)
-        temporal_stream = temporal.set_pretrained_model(load_model_path)
-
-    else:
-        start_epoch_num = 0
-        temporal_stream = temporal.basic()
-        print('set network')
-
-    sgd = SGD(lr=0.001, decay=1e-6, momentum=0.9, nesterov=True)
-    temporal_stream.compile(optimizer=sgd,  # 'Adam',
-                            loss='categorical_crossentropy',
-                            metrics=['accuracy'])
-    print('complete network setting')
-
-    tmp_numiter = len(train_loader.get_train_data_list())/batch_size
-    num_iter = int(tmp_numiter)+1 if tmp_numiter - int(tmp_numiter) > 0 else int(tmp_numiter)
-    tbCallBack.set_model(temporal_stream)
-
-    best_val_acc = 0
-    for epoch in range(start_epoch_num, start_epoch_num + num_epoch):
-        print('Epoch', epoch)
-
-        train_acc, train_loss = train_1epoch(temporal_stream, train_loader, num_iter)
-        print("train_loss:", train_loss, "train_acc:", train_acc)
-
-        tr_val_acc, tr_val_loss = validation_1epoch(temporal_stream, train_val_loader)
-        print("tr_val_loss:", tr_val_loss, "tr_val_acc:", tr_val_acc)
-
-        val_acc, val_loss = validation_1epoch(temporal_stream, test_loader)
-        print("val_loss:", val_loss, "val_acc:", val_acc)
-
-        write_log(tbCallBack,
-                  ["train_loss", "train_acc", 'validation_loss', 'validation_acc', 'tr_val_loss', 'tr_val_acc'],
-                  [train_loss, train_acc, val_loss, val_acc, tr_val_loss, tr_val_acc],
-                  epoch)
-
-        best_val_acc = save_best_model(epoch, val_acc, best_val_acc, temporal_stream, save_model_path)
-
-    #  A  A
-    # (‘ㅅ‘=)
-    # J.M.Seo
+#  A  A
+# (‘ㅅ‘=)
+# J.M.Seo

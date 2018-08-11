@@ -1,11 +1,8 @@
 import random
 import os
-import cv2
 from PIL import Image
-import re
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
-
 
 class spatial_dataset(Dataset):
     def __init__(self, dic, root_dir, mode, transform=None):
@@ -18,6 +15,7 @@ class spatial_dataset(Dataset):
         self.mode = mode
         self.img_rows = 224
         self.img_cols = 224
+        self.n_label = 51
 
     def __len__(self):
         return len(self.keys)
@@ -29,15 +27,20 @@ class spatial_dataset(Dataset):
             # nb_frame = self.values[cur_key][0]
             nb_frame = self.dic[cur_key][0]
             self.clips_idx = random.randint(1, int(nb_frame))
-        elif self.mode == 'val':
             self.video = cur_key.split('/')[0]
-            self.clips_idx = int(cur_key.split('-')[1])
+        elif self.mode == 'val':
+            split_key = cur_key.split('-')
+            self.video = split_key[0]
+            self.clips_idx = int(split_key[1])
         else:
             raise ValueError('There are only train and val mode')
 
         #label = self.values[cur_key][1]
+
+        # label = onehot_encode(self.dic[cur_key][1], self.n_label)
         label = self.dic[cur_key][1]
-        data_root = os.path.join(self.root_dir, self.keys[idx])
+        video_name = self.keys[idx].split('-')[0]
+        data_root = os.path.join(self.root_dir, video_name)
         cur_data_list = os.listdir(data_root)
 
         data_path = os.path.join(data_root, cur_data_list[self.clips_idx-1])
@@ -109,10 +112,11 @@ class Spatial_DataLoader():
                                        root_dir=self.data_path,
                                        mode='train',
                                        transform=transforms.Compose([
+                                           transforms.Scale([256,256]),
                                            transforms.RandomCrop(224),
                                            transforms.RandomHorizontalFlip(),
-                                           transforms.ToTensor(),
-                                           transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                           transforms.ToTensor()
+                                           # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                        ]))
         print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
@@ -132,8 +136,8 @@ class Spatial_DataLoader():
                                          mode='val',
                                          transform=transforms.Compose([
                                              transforms.Scale([224, 224]),
-                                             transforms.ToTensor(),
-                                             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                             transforms.ToTensor()
+                                             # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                          ]))
         print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
         # print validation_set[1]

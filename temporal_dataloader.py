@@ -1,17 +1,11 @@
 import random
 import os
-import cv2
-import re
 from PIL import Image
-import re
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
-import torchvision.models as models
-import torch.nn as nn
+
 import torch
-import torch.backends.cudnn as cudnn
-from torch.autograd import Variable
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 
 class motion_dataset(Dataset):
     def __init__(self, dic, in_channel, root_dir, mode, transform=None):
@@ -36,8 +30,8 @@ class motion_dataset(Dataset):
             idx = i + j
             frame_idx = "%05d.jpg" % idx
             # frame_idx = 'frame' + idx.zfill(6)
-            x_image = 'flow_x_' + frame_idx
-            y_image = 'flow_y_' + frame_idx
+            x_image = os.path.join(video_path, 'flow_x_' + frame_idx)
+            y_image = os.path.join(video_path, 'flow_y_' + frame_idx)
 
             imgX = (Image.open(x_image))
             imgY = (Image.open(y_image))
@@ -63,7 +57,8 @@ class motion_dataset(Dataset):
             self.clips_idx = random.randint(1, int(nb_frame))
             self.video = cur_key.split('/')[0]
         elif self.mode == 'val':
-            self.video = cur_key.split('/')[0]
+            split_key = cur_key.split('-')
+            self.video = split_key[0]
             self.clips_idx = int(cur_key.split('-')[1])
         else:
             raise ValueError('There are only train and val mode')
@@ -71,6 +66,9 @@ class motion_dataset(Dataset):
         # label = self.values[cur_key][1]
         label = self.dic[cur_key][1]
         data = self.stackopf(cur_key)
+
+        if self.transform:
+            data = self.transform(data)
 
         if self.mode == 'train':
             sample = (data, label)
@@ -86,7 +84,6 @@ class Motion_DataLoader():
 
         self.BATCH_SIZE = BATCH_SIZE
         self.num_workers = num_workers
-        self.frame_count = {}
         self.in_channel = in_channel
         self.data_path = path
         self.text_path = txt_path
@@ -115,8 +112,6 @@ class Motion_DataLoader():
         return train_video, test_video
 
     def run(self):
-        # self.load_frame_count()
-        # self.get_training_dic()
         self.val_sample19()
         train_loader = self.train()
         val_loader = self.val()
@@ -139,6 +134,7 @@ class Motion_DataLoader():
                                       mode='train',
                                       transform=transforms.Compose([
                                           transforms.Scale([224, 224]),
+                                          # transforms.RandomCrop(224),
                                           transforms.ToTensor(),
                                       ]))
         print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())

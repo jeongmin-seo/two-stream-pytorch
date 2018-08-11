@@ -36,13 +36,14 @@ class Net(nn.Module):
         return F.softmax(x)
     """
 
-    def __init__(self):
+    def __init__(self, channel):
         super(Net, self).__init__()
         # 3 input image channel, 96 output channels, 7x7 square convolution
         # kernel
+        self._in_channel = channel
         self.fully_size = 4608
         self.conv = nn.Sequential(
-            nn.Conv2d(3, 96, 7, stride=2),
+            nn.Conv2d(self._in_channel, 96, 7, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(96),
             nn.MaxPool2d(kernel_size=2),
@@ -70,8 +71,6 @@ class Net(nn.Module):
             nn.Linear(2048, 51),
             nn.Softmax()
         )
-
-
 
     def forward(self, x):
         # Max pooling over a (2, 2) window

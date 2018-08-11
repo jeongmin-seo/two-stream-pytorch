@@ -1,25 +1,31 @@
-import pickle, os
-from PIL import Image
-import scipy.io
-import time
-from tqdm import tqdm
+import os
 import pandas as pd
 import shutil
 from random import randint
 import numpy as np
 
-from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as transforms
-import torchvision.models as models
-import torch.nn as nn
 import torch
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 
 
+def save_best_model(_is_best, _model, _model_save_path, _epoch):
+    if _is_best:
+        # TODO:save model
+        save_path = os.path.join(_model_save_path, '%d_epoch_best_model.pth' % _epoch)
+        torch.save(_model, save_path)
+
+
+def onehot_encode(_label, _num_class):
+    result = np.zeros(_num_class)
+    result[_label] = 1
+    return result
+
+
 # other util
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
+def accuracy(output, target):  # , topk=(1,)):
+    """
+    Computes the precision@k for the specified values of k
     maxk = max(topk)
     batch_size = target.size(0)
 
@@ -32,6 +38,42 @@ def accuracy(output, target, topk=(1,)):
         correct_k = correct[:k].view(-1).float().sum(0)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
+    """
+    correct = 0
+    batch_size = target.size(0)
+    for i in range(batch_size):
+        tar = target[i].data.cpu().numpy()
+        pred = output[i].data.cpu().numpy()
+        if (tar) == np.argmax(pred):
+            correct += 1
+
+    return float(correct/batch_size)
+
+
+def frame2_video_level_accuracy(_dic_video_level_preds, _dic_video_level_targets, _criterion):
+
+    correct = 0
+    num_videos = len(_dic_video_level_preds)
+    video_level_preds = np.zeros((num_videos, 51))
+    video_level_labels = np.zeros(num_videos)
+    ii = 0
+    for name in sorted(_dic_video_level_preds.keys()):
+
+        preds = _dic_video_level_preds[name]
+        label = _dic_video_level_targets[name]
+
+        video_level_preds[ii, :] = preds
+        video_level_labels[ii] = label
+        ii += 1
+        if np.argmax(preds) == (label):
+            correct += 1
+
+    # top1 top5
+    video_level_labels = torch.from_numpy(video_level_labels).long()
+    video_level_preds = torch.from_numpy(video_level_preds).float()
+    loss = _criterion(Variable(video_level_preds).cuda(), Variable(video_level_labels).cuda())
+
+    return float(correct/num_videos), loss.data.cpu().numpy()
 
 
 class AverageMeter(object):
