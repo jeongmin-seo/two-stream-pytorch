@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from network import Net
 from util import accuracy, frame2_video_level_accuracy, save_best_model
 import pickle
@@ -87,16 +88,20 @@ def main():
                                             path=data_root, txt_path=txt_root, split_num=1)
 
     train_loader, test_loader, test_video = loader.run()
-    model = Net().cuda(device=0)
+    model = Net(channel=3).cuda(device=0)
 
     criterion = nn.CrossEntropyLoss().cuda()
     optimizer = torch.optim.SGD(model.parameters(), 0.01, momentum=0.9)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
     cur_best_acc = 0
     for epoch in range(1, nb_epoch+1):
         train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
         print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
         val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, nb_epoch)
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
+
+        # lr scheduler
+        scheduler.step(val_loss)
 
         is_best = val_acc > cur_best_acc
         if is_best:
@@ -105,6 +110,10 @@ def main():
                 pickle.dump(video_level_pred, f)
             f.close()
 
+        vis.line(X=np.asarray([epoch]), Y=np.asarray([train_loss]),
+                 win=loss_plot, update="append", name='Train Loss')
+        vis.line(X=np.asarray([epoch]), Y=np.asarray([train_acc]),
+                 win=acc_plot, update="append", name="Train Accuracy")
         vis.line(X=np.asarray([epoch]), Y=np.asarray([val_loss]),
                  win=loss_plot, update="append", name='Validation Loss')
         vis.line(X=np.asarray([epoch]), Y=np.asarray([val_acc]),

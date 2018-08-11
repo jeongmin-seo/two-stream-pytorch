@@ -115,8 +115,8 @@ class Spatial_DataLoader():
                                            transforms.Scale([256,256]),
                                            transforms.RandomCrop(224),
                                            transforms.RandomHorizontalFlip(),
-                                           transforms.ToTensor()
-                                           # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                           transforms.ToTensor(),
+                                           transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                        ]))
         print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
@@ -136,8 +136,8 @@ class Spatial_DataLoader():
                                          mode='val',
                                          transform=transforms.Compose([
                                              transforms.Scale([224, 224]),
-                                             transforms.ToTensor()
-                                             # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                             transforms.ToTensor(),
+                                             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                          ]))
         print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
         # print validation_set[1]
@@ -149,3 +149,7 @@ class Spatial_DataLoader():
             num_workers=self.num_workers)
 
         return val_loader
+
+#  A  A
+# (‘ㅅ‘=)
+# J.M.Seo

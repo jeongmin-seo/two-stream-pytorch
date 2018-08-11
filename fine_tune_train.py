@@ -2,20 +2,23 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from network import Net
 from util import accuracy, frame2_video_level_accuracy, save_best_model
+import torchvision.models as models
 import pickle
 import visdom
 import numpy as np
+import os
+from network import *
 
-import temporal_dataloader as data_loader
+import spatial_dataloader as data_loader
 
-data_root = "/home/jeongmin/workspace/data/HMDB51/flow"
+data_root = "/home/jeongmin/workspace/data/HMDB51/frames"
 txt_root = "/home/jeongmin/workspace/data/HMDB51"
-model_path = "/home/jeongmin/workspace/github/two-stream-pytorch/temporal_model"
-batch_size = 64
+model_path = "/home/jeongmin/workspace/github/two-stream-pytorch/ucf_model/spatial_model"
+pretrained_model_path = os.path.join(model_path, "ucf_spatial_model_best.pth.tar")
+n_class = 51
+batch_size = 16
 nb_epoch = 10000
-L = 10
 
 
 def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
@@ -71,6 +74,7 @@ def val_1epoch(_model, _val_loader, _criterion, _epoch, _nb_epochs):
                 dic_video_level_targets[videoName] = target_var[j]
             else:
                 dic_video_level_preds[videoName] += preds[j, :]
+                # dic_video_level_targets[videoName] += target_var[j, :]
 
     video_acc, video_loss = frame2_video_level_accuracy(dic_video_level_preds, dic_video_level_targets, _criterion)
 
@@ -78,20 +82,35 @@ def val_1epoch(_model, _val_loader, _criterion, _epoch, _nb_epochs):
 
 
 def main():
-
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     vis = visdom.Visdom()
     loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
     acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
-    loader = data_loader.Motion_DataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
-                                           path=data_root, txt_path=txt_root, split_num=1)
+    loader = data_loader.Spatial_DataLoader(BATCH_SIZE=batch_size, num_workers=8,
+                                            path=data_root, txt_path=txt_root, split_num=1)
 
     train_loader, test_loader, test_video = loader.run()
-    model = Net(channel=L*2).cuda(device=0)
+    model = resnet101(channel=3).cuda()
+
 
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = torch.optim.SGD(model.parameters(), 0.1, momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), 0.01, momentum=0.9)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
+
+    tmp = torch.load(pretrained_model_path)
+    model.load_state_dict(tmp['state_dict'])
+    optimizer.load_state_dict(tmp['optimizer'])
+
+    # torch.save(model, './best_spatial.pth')
+    # for param in model.parameters():
+    #     param.requires_grad = False
+
+    # Parameters of newly constructed modules have requires_grad=True by default
+    num_ftrs = model.fc_custom.in_features
+    model.fc_custom = nn.Linear(num_ftrs, n_class)
+
+    model = model.to(device)
     cur_best_acc = 0
     for epoch in range(1, nb_epoch+1):
         train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
@@ -105,7 +124,7 @@ def main():
         is_best = val_acc > cur_best_acc
         if is_best:
             cur_best_acc = val_acc
-            with open('./temporal_pred/temporal_video_preds.pickle', 'wb') as f:
+            with open('./pred/spatial_video_preds.pickle','wb') as f:
                 pickle.dump(video_level_pred, f)
             f.close()
 

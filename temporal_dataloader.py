@@ -21,7 +21,7 @@ class motion_dataset(Dataset):
         self.img_cols = 224
 
     def stackopf(self, keys):
-        video_path = os.path.join(self.root_dir, keys)
+        video_path = os.path.join(self.root_dir, keys.split('-')[0])
 
         flow = torch.FloatTensor(2 * self.in_channel, self.img_rows, self.img_cols)
         i = int(self.clips_idx)
@@ -54,7 +54,7 @@ class motion_dataset(Dataset):
         if self.mode == 'train':
             # nb_frame = self.values[cur_key][0]
             nb_frame = self.dic[cur_key][0]
-            self.clips_idx = random.randint(1, int(nb_frame))
+            self.clips_idx = random.randint(1, int(nb_frame-self.in_channel+1))
             self.video = cur_key.split('/')[0]
         elif self.mode == 'val':
             split_key = cur_key.split('-')
@@ -66,9 +66,6 @@ class motion_dataset(Dataset):
         # label = self.values[cur_key][1]
         label = self.dic[cur_key][1]
         data = self.stackopf(cur_key)
-
-        if self.transform:
-            data = self.transform(data)
 
         if self.mode == 'train':
             sample = (data, label)
@@ -98,7 +95,7 @@ class Motion_DataLoader():
         for line in f.readlines():
             line = line.replace('\n', '')
             split_line = line.split(" ")
-            tmp[split_line[0]] = [int(split_line[1]), int(split_line[2])]  # split[0] is video name and split[1] and [2] are frame num and class label
+            tmp[split_line[0]] = [int(split_line[1]) - 1, int(split_line[2])]  # split[0] is video name and split[1] and [2] are frame num and class label
 
         return tmp
 
@@ -121,7 +118,7 @@ class Motion_DataLoader():
     def val_sample19(self):
         self.dic_test_idx = {}
         for video in self.test_video:
-            n, g = video.split('_', 1)
+            # n, g = video.split('_', 1)
 
             sampling_interval = int((self.test_video[video][0] - 10 + 1) / 19)
             for index in range(19):
@@ -166,3 +163,7 @@ class Motion_DataLoader():
             num_workers=self.num_workers)
 
         return val_loader
+
+#  A  A
+# (‘ㅅ‘=)
+# J.M.Seo
