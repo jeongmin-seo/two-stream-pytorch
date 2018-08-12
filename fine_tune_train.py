@@ -95,18 +95,20 @@ def main():
 
 
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = torch.optim.SGD(model.parameters(), 0.01, momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), 0.001, momentum=0.9)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 
     tmp = torch.load(pretrained_model_path)
     model.load_state_dict(tmp['state_dict'])
-    optimizer.load_state_dict(tmp['optimizer'])
+    #optimizer.load_state_dict(tmp['optimizer'])
 
-    # torch.save(model, './best_spatial.pth')
-    # for param in model.parameters():
-    #     param.requires_grad = False
+    torch.save(model, './best_spatial.pth')
+    for param in model.parameters():
+        param.requires_grad = False
 
     # Parameters of newly constructed modules have requires_grad=True by default
+    model.fc_custom.weight.requires_grad = True
+    model.fc_custom.bias.requires_grad = True
     num_ftrs = model.fc_custom.in_features
     model.fc_custom = nn.Linear(num_ftrs, n_class)
 
@@ -124,7 +126,7 @@ def main():
         is_best = val_acc > cur_best_acc
         if is_best:
             cur_best_acc = val_acc
-            with open('./pred/spatial_video_preds.pickle','wb') as f:
+            with open('./ucf_model/spatial_pred/spatial_video_preds.pickle','wb') as f:
                 pickle.dump(video_level_pred, f)
             f.close()
 

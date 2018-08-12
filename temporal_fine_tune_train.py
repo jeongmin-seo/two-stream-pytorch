@@ -102,7 +102,13 @@ def main():
     model.load_state_dict(tmp['state_dict'])
     optimizer.load_state_dict(tmp['optimizer'])
 
+    # torch.save(model, './best_spatial.pth')
+    for param in model.parameters():
+        param.requires_grad = False
+
     # Parameters of newly constructed modules have requires_grad=True by default
+    model.fc_custom.weight.requires_grad = True
+    model.fc_custom.bias.requires_grad = True
     num_ftrs = model.fc_custom.in_features
     model.fc_custom = nn.Linear(num_ftrs, n_class)
 

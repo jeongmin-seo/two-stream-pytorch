@@ -7,6 +7,7 @@ from util import accuracy, frame2_video_level_accuracy, save_best_model
 import pickle
 import visdom
 import numpy as np
+import os
 
 import spatial_dataloader as data_loader
 
@@ -88,13 +89,13 @@ def main():
                                             path=data_root, txt_path=txt_root, split_num=1)
 
     train_loader, test_loader, test_video = loader.run()
-    model = Net(channel=3).cuda(device=0)
-
+    # model = Net(channel=3).cuda(device=0)
+    model = torch.load(os.path.join(model_path, '161_epoch_best_model.pth'))
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = torch.optim.SGD(model.parameters(), 0.01, momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), 0.001, momentum=0.9)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
     cur_best_acc = 0
-    for epoch in range(1, nb_epoch+1):
+    for epoch in range(162, nb_epoch+1):
         train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
         print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
         val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, nb_epoch)
@@ -106,7 +107,7 @@ def main():
         is_best = val_acc > cur_best_acc
         if is_best:
             cur_best_acc = val_acc
-            with open('./pred/spatial_video_preds.pickle','wb') as f:
+            with open('./spatial_pred/spatial_video_preds.pickle','wb') as f:
                 pickle.dump(video_level_pred, f)
             f.close()
 
