@@ -22,18 +22,18 @@ class SpatialCubeDataset(Dataset):
     def stack_frame(self, keys):
         video_path = os.path.join(self.root_dir, keys.split('-')[0])
 
-        cube = torch.FloatTensor(self.in_channel, self.img_rows, self.img_cols)
+        cube = torch.FloatTensor(3, self.in_channel,self.img_rows, self.img_cols)
         i = int(self.clips_idx)
 
         for j in range(self.in_channel):
             idx = i + j
-            frame_idx = "iamge_%05d.jpg" % idx
+            frame_idx = "image_%05d.jpg" % idx
             image = os.path.join(video_path, frame_idx)
             img = (Image.open(image))
 
             X = self.transform(img)
 
-            cube[j, :, :] = X
+            cube[:, j, :, :] = X
             img.close()
         return cube
 
@@ -123,7 +123,7 @@ class SpatialCubeDataLoader:
                                               transforms.Scale([256,256]),
                                               transforms.RandomCrop(224),
                                               transforms.RandomHorizontalFlip(),
-                                              transforms.Grayscale(),
+                                              # transforms.Grayscale(),
                                               transforms.ToTensor()
                                               # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                           ]))
@@ -146,7 +146,7 @@ class SpatialCubeDataLoader:
                                             mode='val',
                                             transform=transforms.Compose([
                                                 transforms.Scale([224, 224]),
-                                                transforms.Grayscale(),
+                                                # transforms.Grayscale(),
                                                 transforms.ToTensor()
                                                 # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                             ]))
