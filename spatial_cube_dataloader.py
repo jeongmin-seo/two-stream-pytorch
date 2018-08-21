@@ -15,17 +15,25 @@ class SpatialCubeDataset(Dataset):
         self.transform = transform
         self.mode = mode
         self.in_channel = in_channel
-        self.img_rows = 224
-        self.img_cols = 224
+        self.img_rows = 112
+        self.img_cols = 112
         self.n_label = 51
 
-    def stack_frame(self, keys):
+
+    def reset_idx(self, _idx, _n_frame):
+        if _idx > _n_frame:
+            return self.reset_idx(_idx - _n_frame, _n_frame)
+        else:
+            return _idx
+
+    def stack_frame(self, keys, _n_frame):
         video_path = os.path.join(self.root_dir, keys.split('-')[0])
 
         cube = torch.FloatTensor(3, self.in_channel,self.img_rows, self.img_cols)
         i = int(self.clips_idx)
 
         for j in range(self.in_channel):
+            # idx = self.reset_idx(i + j, _n_frame)
             idx = i + j
             frame_idx = "image_%05d.jpg" % idx
             image = os.path.join(video_path, frame_idx)
@@ -43,8 +51,8 @@ class SpatialCubeDataset(Dataset):
     def __getitem__(self, idx):
         # print ('mode:',self.mode,'calling Dataset:__getitem__ @ idx=%d'%idx)
         cur_key = self.keys[idx]
+        nb_frame = self.dic[cur_key][0]
         if self.mode == 'train':
-            nb_frame = self.dic[cur_key][0]
             self.clips_idx = random.randint(1, int(nb_frame - self.in_channel + 1))
             self.video = cur_key.split('/')[0]
         elif self.mode == 'val':
@@ -55,7 +63,7 @@ class SpatialCubeDataset(Dataset):
             raise ValueError('There are only train and val mode')
 
         label = self.dic[cur_key][1]
-        data = self.stack_frame(cur_key)
+        data = self.stack_frame(cur_key, nb_frame)
 
         if self.mode == 'train':
             sample = (data, label)
@@ -108,7 +116,7 @@ class SpatialCubeDataLoader:
     def val_sample19(self):
         self.dic_test_idx = {}
         for video in self.test_video:
-            sampling_interval = int((self.test_video[video][0] - 10 + 1) / 19)
+            sampling_interval = int((self.test_video[video][0] - self.in_channel + 1) / 19)
             for index in range(19):
                 clip_idx = index * sampling_interval
                 key = video + '-' + str(clip_idx + 1)
@@ -120,12 +128,14 @@ class SpatialCubeDataLoader:
                                           root_dir=self.data_path,
                                           mode='train',
                                           transform=transforms.Compose([
-                                              transforms.Scale([256,256]),
-                                              transforms.RandomCrop(224),
-                                              transforms.RandomHorizontalFlip(),
+                                              transforms.Scale([112,112]),
+                                              #transforms.RandomCrop(224),
+                                              # transforms.RandomHorizontalFlip(),
                                               # transforms.Grayscale(),
-                                              transforms.ToTensor()
-                                              # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                              transforms.ToTensor(),
+                                              transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                   std=[0.229, 0.224, 0.225])
+
                                           ]))
         print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
@@ -145,10 +155,10 @@ class SpatialCubeDataLoader:
                                             root_dir=self.data_path,
                                             mode='val',
                                             transform=transforms.Compose([
-                                                transforms.Scale([224, 224]),
+                                                transforms.Scale([112, 112]),
                                                 # transforms.Grayscale(),
-                                                transforms.ToTensor()
-                                                # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                                transforms.ToTensor(),
+                                                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                             ]))
         print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
         # print validation_set[1]

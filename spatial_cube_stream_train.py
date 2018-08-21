@@ -6,6 +6,7 @@ import visdom
 import numpy as np
 import os
 import pickle
+import resnet_3d
 import spatial_cube_dataloader as data_loader
 from util import accuracy, frame2_video_level_accuracy, save_best_model
 
@@ -14,9 +15,9 @@ from util import accuracy, frame2_video_level_accuracy, save_best_model
 data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
 txt_root = "/home/jm/Two-stream_data/HMDB51"
 save_path = "/home/jm/workspace/two-stream-pytorch/spatial_cube_model"
-batch_size = 8
+batch_size = 1
 nb_epoch = 10000
-L = 10
+L = 16
 n_class = 51
 
 # C3D Model
@@ -24,21 +25,21 @@ class C3D(nn.Module):
     def __init__(self):
         super(C3D, self).__init__()
         self.group1 = nn.Sequential(
-            nn.Conv3d(3, 64, kernel_size=3, padding=1),
+            nn.Conv3d(3, 64, kernel_size=5, padding=1),
             nn.ReLU(),
             nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2)))
         #init.xavier_normal(self.group1.state_dict()['weight'])
         self.group2 = nn.Sequential(
             nn.Conv3d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2), padding=1))
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)))
         #init.xavier_normal(self.group2.state_dict()['weight'])
         self.group3 = nn.Sequential(
             nn.Conv3d(128, 256, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv3d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2), padding=1))
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)))
         #init.xavier_normal(self.group3.state_dict()['weight'])
         self.group4 = nn.Sequential(
             nn.Conv3d(256, 512, kernel_size=3, padding=1),
@@ -56,7 +57,7 @@ class C3D(nn.Module):
         #init.xavier_normal(self.group5.state_dict()['weight'])
 
         self.fc1 = nn.Sequential(
-            nn.Linear(25088, 2048),               #
+            nn.Linear(86528, 2048),               #
             nn.ReLU(),
             nn.Dropout(0.5))
         #init.xavier_normal(self.fc1.state_dict()['weight'])
@@ -74,8 +75,8 @@ class C3D(nn.Module):
             self.group1,
             self.group2,
             self.group3,
-            self.group4,
-            self.group5
+            self.group4
+            # self.group5
         )
 
         self._classifier = nn.Sequential(
@@ -105,7 +106,7 @@ def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epoc
     loss_list = []
     _model.train()
     for i, (data, label) in enumerate(_train_loader):
-        label = label.cuda(async=True)
+        label = label.cuda()
         input_var = Variable(data).cuda()
         target_var = Variable(label).cuda().long()
 
@@ -168,10 +169,13 @@ def main():
                                                path=data_root, txt_path=txt_root, split_num=1)
 
     train_loader, test_loader, test_video = loader.run()
-    model = C3D().cuda()
+
+    # model = resnet_3d.resnet18(sample_size=112, sample_duration=L)
+    model = resnet_3d.resnet34(sample_size=112, sample_duration=L)
 
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = torch.optim.SGD(model.parameters(), 0.001, momentum=0.9)
+    # optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=2e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 
     model = model.to(device)
