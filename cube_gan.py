@@ -5,6 +5,7 @@ import torch
 import data_loader.spatial_cube_dataloader as data_loader
 from util import save_best_model
 import numpy as np
+import visdom
 
 cuda = True if torch.cuda.is_available() else False
 
@@ -21,7 +22,6 @@ class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
 
-        # self.init_size = opt.img_size // 4
         self.init_size = 6
         self.init_channel = 4
         self.l1 = nn.Sequential(nn.Linear(5000, 512 * self.init_channel * self.init_size * self.init_size))
@@ -71,8 +71,9 @@ class Discriminator(nn.Module):
         )
 
         # The height and width of downsampled image
-        self.adv_layer = nn.Sequential(nn.Linear(73728, 1),
-                                       nn.Sigmoid())
+        # self.adv_layer = nn.Sequential(nn.Linear(73728, 1),
+        #                                nn.Sigmoid())
+        self.classifer_layer = nn.Sequential(nn.Linear(73728, n_class+1)) # +1 is fake label relate
 
     def forward(self, img_cube):
         out = self.model(img_cube)
@@ -88,6 +89,11 @@ if __name__ == "__main__":
     loader = data_loader.SpatialCubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
                                                path=data_root, txt_path=txt_root, split_num=1)
     train_loader, test_loader, test_video = loader.run()
+
+    # visdom init
+    vis = visdom.Visdom()
+    loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
+    acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
     # init discriminator
     discriminator = Discriminator()
@@ -107,20 +113,21 @@ if __name__ == "__main__":
     prev_err = None
     for epoch in range(nb_epoch):
         generator_error = []
+        discriminator_error = []
         for i, (data, label) in enumerate(train_loader):
 
             # discriminator train
             discriminator.zero_grad()
 
             input_var = Variable(data).cuda()
-            target = Variable(torch.ones(input_var.size()[0])).cuda()
+            target = Variable(label).cuda()
             output = discriminator(input_var)
             err_real = criterion(output, target)
 
             # noise = Variable(torch.randn(input_var.size()[0], latent_Vector, 1, 1)).cuda()
             noise = Variable(torch.randn(input_var.size()[0], 5000)).cuda()
             fake = generator(noise)
-            target = Variable(torch.zeros(input_var.size()[0])).cuda()
+            target = Variable(torch.ones(input_var.size()[0])*51).cuda()   # fake data label is 51
             output = discriminator(fake.detach())
             err_fake = criterion(output, target)
 
@@ -130,7 +137,7 @@ if __name__ == "__main__":
 
             # generator train
             generator.zero_grad()
-            target = Variable(torch.ones(input_var.size()[0])).cuda()
+            target = Variable(torch.ones(input_var.size()[0])*51).cuda()
             output = discriminator(fake)
             errG = criterion(output, target)
             errG.backward()
@@ -138,9 +145,17 @@ if __name__ == "__main__":
 
             print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f' % (epoch, nb_epoch, i, len(train_loader), errD.data[0], errG.data[0]))
             generator_error.append(errG.data[0])
+            discriminator_error.append(errD.data[0])
 
-        model_err = np.mean(np.asarray(generator_error))
-        if not prev_err or prev_err > model_err:
+        generator_model_err = np.mean(np.asarray(generator_error))
+        discriminator_model_err = np.mean(np.asarray(discriminator_error))
+
+        if not prev_err or prev_err > generator_model_err:
             save_best_model(True, generator, save_path, epoch)
-            prev_err = model_err
+            prev_err = generator_model_err
+
+        vis.line(X=np.asarray([epoch]), Y=np.asarray([generator_error]),
+                 win=loss_plot, update="append", name='Train G Loss')
+        vis.line(X=np.asarray([epoch]), Y=np.asarray([discriminator_model_err]),
+                 win=acc_plot, update="append", name="Train D Loss")
 
