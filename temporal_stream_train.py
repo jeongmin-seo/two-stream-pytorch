@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from network import Net
+from network.network import Net
 from util import accuracy, frame2_video_level_accuracy, save_best_model
 import pickle
 import visdom
 import numpy as np
 
-import temporal_dataloader as data_loader
+import data_loader.temporal_dataloader as data_loader
 
 data_root = "/home/jeongmin/workspace/data/HMDB51/flow"
 txt_root = "/home/jeongmin/workspace/data/HMDB51"

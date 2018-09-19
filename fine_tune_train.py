@@ -8,9 +8,9 @@ import pickle
 import visdom
 import numpy as np
 import os
-from network import *
+from network.network import *
 
-import spatial_dataloader as data_loader
+import data_loader.spatial_dataloader as data_loader
 
 data_root = "/home/jeongmin/workspace/data/HMDB51/frames"
 txt_root = "/home/jeongmin/workspace/data/HMDB51"

@@ -2,7 +2,7 @@ from torch.autograd import Variable
 import torch.optim as optim
 import torch.nn as nn
 import torch
-import spatial_cube_dataloader as data_loader
+import data_loader.spatial_cube_dataloader as data_loader
 from util import save_best_model
 import numpy as np
 

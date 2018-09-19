@@ -6,8 +6,8 @@ import visdom
 import numpy as np
 import os
 import pickle
-import resnet_3d
-import spatial_cube_dataloader as data_loader
+import network.resnet_3d
+import data_loader.spatial_cube_dataloader as data_loader
 from util import accuracy, frame2_video_level_accuracy, save_best_model
 
 
