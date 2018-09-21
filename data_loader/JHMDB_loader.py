@@ -7,20 +7,19 @@ import torchvision.transforms as transforms
 
 
 class JHMDBDataset(Dataset):
-    def __init__(self, data_root, txt_file_path, L, img_rows, img_cols, transform):
+    def __init__(self, dic, data_root, L, transform, img_size=(112,112)):
         self.data_root = data_root
-        self.txt_path = txt_file_path
         self.L = L
-        self.data_list = self.txt_file_reader()
-        self.keys = self.data_list.keys()
+        self.dic = dic
+        self.keys = dic.keys()
         self.transform = transform
-        self.img_rows = 112
-        self.img_cols = 112
+        self.img_rows = img_size[0]
+        self.img_cols = img_size[1]
 
     def __getitem__(self, idx):
         file_path = self.keys[0]
-        n_frame = self.data_list[file_path][0]
-        class_info = self.data_list[file_path][1]
+        n_frame = self.dic[file_path][0]
+        class_info = self.dic[file_path][1]
 
         cube = torch.FloatTensor(1, self.L, self.img_rows, self.img_cols)
         clips_idx = random.randint(1, int(n_frame - self.L + 1))
@@ -37,6 +36,18 @@ class JHMDBDataset(Dataset):
 
         return cube , class_info
 
+class JHMDBLoader:
+    def __init__(self, batch_size, num_workers, in_channel, path, txt_path, img_size=(112,112)):
+
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.in_channel = in_channel
+        self.data_path = path
+        self.txt_path = txt_path
+        self.img_size = img_size
+        # split the training and testing videos
+        self.video_info = self.txt_file_reader()
+
     def txt_file_reader(self):
 
         if not self.txt_path:
@@ -50,6 +61,22 @@ class JHMDBDataset(Dataset):
 
         return tmp
 
-class JHMDBLoader(DataLoader):
-    def __init__(self, batch_size, ):
-        pass
+    def load(self):
+        jhmdb_set = JHMDBDataset(dic=self.video_info,
+                                 data_root=self.data_path,
+                                 L  =self.in_channel,
+                                 transform=transforms.Compose([
+                                     transforms.Scale([self.img_size[0],self.img_size[1]]),
+                                     transforms.ToTensor(),
+                                     transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                          std=[0.229, 0.224, 0.225])
+                                 ]))
+        print('==> Data :', len(jhmdb_set), ' videos', jhmdb_set[1][0].size())
+
+        data_loader = DataLoader(dataset=jhmdb_set,
+                                 batch_size=self.batch_size,
+                                 shuffle=True,
+                                 num_workers=self.num_workers,
+                                 pin_memory=True)
+
+        return data_loader

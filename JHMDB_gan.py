@@ -12,7 +12,7 @@ cuda = True if torch.cuda.is_available() else False
 
 # experimental parameters
 data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
-txt_root = "/home/jm/Two-stream_data/HMDB51"
+txt_root = "/home/jm/Two-stream_data/HMDB51/train_split_1.txt"
 save_path = "/home/jm/workspace/two-stream-pytorch/cube_gan_model"
 batch_size = 1
 nb_epoch = 10000
@@ -21,9 +21,9 @@ n_class = 51
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    loader = data_loader.SpatialCubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
-                                               path=data_root, txt_path=txt_root, split_num=1)
-    train_loader, test_loader, test_video = loader.run()
+    loader = data_loader.JHMDBLoader(batch_size=batch_size, num_workers=8, in_channel=L,
+                                     path=data_root, txt_path=txt_root)
+    train_loader = loader.load()
 
     # visdom init
     vis = visdom.Visdom()
@@ -89,7 +89,7 @@ if __name__ == "__main__":
             save_best_model(True, generator, save_path, epoch)
             prev_err = generator_model_err
 
-        vis.line(X=np.asarray([epoch]), Y=np.asarray([generator_error]),
+        vis.line(X=np.asarray([epoch]), Y=np.asarray([generator_model_err]),
                  win=loss_plot, update="append", name='Train G Loss')
         vis.line(X=np.asarray([epoch]), Y=np.asarray([discriminator_model_err]),
                  win=acc_plot, update="append", name="Train D Loss")
