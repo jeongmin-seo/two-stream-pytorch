@@ -34,12 +34,13 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, n_class=0):
+    def __init__(self, n_class=0, img_channel=3):
         super(Discriminator, self).__init__()
         self.n_class = n_class + 1
+        self.image_channel = img_channel
 
         self.model = nn.Sequential(
-            nn.Conv3d(3, 64, kernel_size=(5,7,7), stride=(1,2,2)),
+            nn.Conv3d(self.image_channel, 64, kernel_size=(5,7,7), stride=(1,2,2)),
             nn.ReLU(),
 
             nn.Conv3d(64, 128, kernel_size=(3,7,7), stride=(1,2,2)),
@@ -67,3 +68,7 @@ class Discriminator(nn.Module):
         validity = self.adv_layer(out)
 
         return validity
+
+#  A  A
+# (‘ㅅ‘=)
+# J.M.Seo

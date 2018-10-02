@@ -11,13 +11,13 @@ import visdom
 cuda = True if torch.cuda.is_available() else False
 
 # experimental parameters
-data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
-txt_root = "/home/jm/Two-stream_data/HMDB51/train_split_1.txt"
-save_path = "/home/jm/workspace/two-stream-pytorch/cube_gan_model"
-batch_size = 1
+data_root = "/home/jm/hdd/JHMDB/background_extract_image"
+txt_root = "/home/jm/hdd/JHMDB/train_split_1.txt"
+save_path = "/home/jm/workspace/two-stream-pytorch/cube_gan_model_jhmdb"
+batch_size = 4
 nb_epoch = 10000
-L = 16
-n_class = 51
+L = 8
+n_class = 21
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -31,7 +31,7 @@ if __name__ == "__main__":
     acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
     # init discriminator
-    discriminator = Discriminator()
+    discriminator = Discriminator(img_channel=1)
     discriminator.train()
     discriminator = discriminator.to(device)
 
@@ -94,3 +94,6 @@ if __name__ == "__main__":
         vis.line(X=np.asarray([epoch]), Y=np.asarray([discriminator_model_err]),
                  win=acc_plot, update="append", name="Train D Loss")
 
+#  A  A
+# (‘ㅅ‘=)
+# J.M.Seo

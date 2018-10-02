@@ -13,8 +13,6 @@ class spatial_dataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.mode = mode
-        self.img_rows = 224
-        self.img_cols = 224
         self.n_label = 51
 
     def __len__(self):
@@ -59,7 +57,7 @@ class spatial_dataset(Dataset):
 
 
 class Spatial_DataLoader():
-    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num):
+    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num, is_ae=False):
 
         self.BATCH_SIZE = BATCH_SIZE
         self.num_workers = num_workers
@@ -68,6 +66,7 @@ class Spatial_DataLoader():
         self.split_num = split_num
         # split the training and testing videos
         self.train_video, self.test_video = self.load_train_test_list()
+        self.is_ae = is_ae
 
     @staticmethod
     def read_text_file(file_path):
@@ -108,24 +107,40 @@ class Spatial_DataLoader():
                 self.dic_test_idx[key] = self.test_video[video]
 
     def train(self):
-        training_set = spatial_dataset(dic=self.train_video,
-                                       root_dir=self.data_path,
-                                       mode='train',
-                                       transform=transforms.Compose([
-                                           transforms.Scale([256,256]),
-                                           transforms.RandomCrop(224),
-                                           transforms.RandomHorizontalFlip(),
-                                           transforms.ToTensor(),
-                                           transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                       ]))
-        print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
+        if not self.is_ae:
+            training_set = spatial_dataset(dic=self.train_video,
+                                           root_dir=self.data_path,
+                                           mode='train',
+                                           transform=transforms.Compose([
+                                               transforms.Scale([256,256]),
+                                               transforms.RandomCrop(224),
+                                               transforms.RandomHorizontalFlip(),
+                                               transforms.ToTensor(),
+                                               transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                           ]))
+            print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
+
+        else:
+            training_set = spatial_dataset(dic=self.train_video,
+                                           root_dir=self.data_path,
+                                           mode='train',
+                                           transform=transforms.Compose([
+                                               transforms.Scale([64, 64]),
+                                               # transforms.RandomCrop(224),
+                                               # transforms.RandomHorizontalFlip(),
+                                               transforms.ToTensor(),
+                                               transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                    std=[0.229, 0.224, 0.225])
+                                           ]))
+            print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
         train_loader = DataLoader(
             dataset=training_set,
             batch_size=self.BATCH_SIZE,
             shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=True
+            pin_memory=True,
+            drop_last=True
         )
 
         return train_loader

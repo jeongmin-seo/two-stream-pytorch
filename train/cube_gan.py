@@ -159,3 +159,6 @@ if __name__ == "__main__":
         vis.line(X=np.asarray([epoch]), Y=np.asarray([discriminator_model_err]),
                  win=acc_plot, update="append", name="Train D Loss")
 
+#  A  A
+# (‘ㅅ‘=)
+# J.M.Seo

@@ -11,13 +11,16 @@ class JHMDBDataset(Dataset):
         self.data_root = data_root
         self.L = L
         self.dic = dic
-        self.keys = dic.keys()
+        self.keys = list(dic.keys())
         self.transform = transform
         self.img_rows = img_size[0]
         self.img_cols = img_size[1]
 
+    def __len__(self):
+        return len(self.keys)
+
     def __getitem__(self, idx):
-        file_path = self.keys[0]
+        file_path = self.keys[idx]
         n_frame = self.dic[file_path][0]
         class_info = self.dic[file_path][1]
 
@@ -68,10 +71,9 @@ class JHMDBLoader:
                                  transform=transforms.Compose([
                                      transforms.Scale([self.img_size[0],self.img_size[1]]),
                                      transforms.ToTensor(),
-                                     transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                          std=[0.229, 0.224, 0.225])
+                                     transforms.Normalize(mean=[0.485],
+                                                          std=[0.229])
                                  ]))
-        print('==> Data :', len(jhmdb_set), ' videos', jhmdb_set[1][0].size())
 
         data_loader = DataLoader(dataset=jhmdb_set,
                                  batch_size=self.batch_size,
@@ -80,3 +82,7 @@ class JHMDBLoader:
                                  pin_memory=True)
 
         return data_loader
+
+#  A  A
+# (‘ㅅ‘=)
+# J.M.Seo
