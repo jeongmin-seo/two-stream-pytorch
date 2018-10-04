@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from network.network import Net
-from util import accuracy, frame2_video_level_accuracy, save_best_model
+from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 import pickle
 import visdom
 import numpy as np

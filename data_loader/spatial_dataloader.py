@@ -4,7 +4,8 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 
-class spatial_dataset(Dataset):
+
+class SpatialDataset(Dataset):
     def __init__(self, dic, root_dir, mode, transform=None):
         # Generate a 16 Frame clip
         self.keys = list(dic.keys())
@@ -56,7 +57,7 @@ class spatial_dataset(Dataset):
         return sample
 
 
-class Spatial_DataLoader():
+class SpatialDataLoader:
     def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num, is_ae=False):
 
         self.BATCH_SIZE = BATCH_SIZE
@@ -108,7 +109,7 @@ class Spatial_DataLoader():
 
     def train(self):
         if not self.is_ae:
-            training_set = spatial_dataset(dic=self.train_video,
+            training_set = SpatialDataset(dic=self.train_video,
                                            root_dir=self.data_path,
                                            mode='train',
                                            transform=transforms.Compose([
@@ -121,7 +122,7 @@ class Spatial_DataLoader():
             print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
         else:
-            training_set = spatial_dataset(dic=self.train_video,
+            training_set = SpatialDataset(dic=self.train_video,
                                            root_dir=self.data_path,
                                            mode='train',
                                            transform=transforms.Compose([
@@ -146,7 +147,7 @@ class Spatial_DataLoader():
         return train_loader
 
     def val(self):
-        validation_set = spatial_dataset(dic=self.dic_test_idx,
+        validation_set = SpatialDataset(dic=self.dic_test_idx,
                                          root_dir=self.data_path,
                                          mode='val',
                                          transform=transforms.Compose([
@@ -164,6 +165,10 @@ class Spatial_DataLoader():
             num_workers=self.num_workers)
 
         return val_loader
+
+
+class MakeRepresentationLoader:
+    pass
 
 #  A  A
 # (‘ㅅ‘=)

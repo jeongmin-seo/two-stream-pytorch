@@ -8,7 +8,7 @@ import os
 import pickle
 from network import resnet_3d
 import data_loader.spatial_cube_dataloader as data_loader
-from util import accuracy, frame2_video_level_accuracy, save_best_model
+from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 
 
 # experimental parameters

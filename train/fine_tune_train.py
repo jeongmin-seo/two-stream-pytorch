@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from util import accuracy, frame2_video_level_accuracy, save_best_model
+from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 import torchvision.models as models
 import pickle
 import visdom
@@ -87,7 +87,7 @@ def main():
     loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
     acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
-    loader = data_loader.Spatial_DataLoader(BATCH_SIZE=batch_size, num_workers=8,
+    loader = data_loader.SpatialDataLoader(BATCH_SIZE=batch_size, num_workers=8,
                                             path=data_root, txt_path=txt_root, split_num=1)
 
     train_loader, test_loader, test_video = loader.run()

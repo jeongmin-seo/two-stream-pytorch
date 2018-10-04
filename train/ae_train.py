@@ -9,22 +9,36 @@ import torch
 import torch.nn as nn
 import os
 from network.autoencoder_2d import Encoder, Decoder, UnNormalize
+import argparse
+from util.custom_error import WrongSelectError
+
+###################################
+# select mode                     #
+###################################
+parser = argparse.ArgumentParser(description='PyTorch Two-Stream Action Recognition')
+parser.add_argument('--data_root', metavar='DIR', default='/home/jeongmin/workspace/data/HMDB51/frames',
+                    help='path to datset root')
+parser.add_argument('--text_root', '-t', default='/home/jeongmin/workspace/data/HMDB51',
+                    help='path to train test split text files root')
+parser.add_argument('--split_number', default=1, help='select split number', choices=[1, 2, 3])
+parser.add_argument('--save_path', '-s', default='/home/jeongmin/workspace/model/two-stream-pytorch/frame_ae')
+parser.add_argument('--mode', '-m', default='train', choices=["train", "test"])
+parser.add_argument('--batch_size', '-b', default=32)
+parser.add_argument('--epoch', '-e', default=10000)
 
 ###################################
 # requirment variable             #
 ###################################
-data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
-txt_root = "/home/jm/Two-stream_data/HMDB51"
-save_path = "/home/jm/workspace/two-stream-pytorch/frame_ae_model"
-batch_size = 32
-nb_epoch = 10000
+# data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
+# txt_root = "/home/jm/Two-stream_data/HMDB51"
+# save_path = "/home/jm/workspace/two-stream-pytorch/frame_ae_model"
+# batch_size = 32
+# nb_epoch = 10000
 
 
-
-if __name__=="__main__":
-
-    loader = data_loader.Spatial_DataLoader(BATCH_SIZE=batch_size, num_workers=8,
-                                            path=data_root, txt_path=txt_root, split_num=1,is_ae=True)
+def train():
+    loader = data_loader.SpatialDataLoader(BATCH_SIZE=args.batch_size, num_workers=8, path=args.data_root,
+                                           txt_path=args.text_root, split_num=args.split_number, is_ae=True)
     train_loader, test_loader, test_video = loader.run()
 
     # visdom init
@@ -35,12 +49,12 @@ if __name__=="__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # init encoder
-    encoder = Encoder(_batch_size=batch_size)
+    encoder = Encoder(_batch_size=args.batch_size)
     encoder.train()
     encoder = encoder.to(device)
 
     # init decoder
-    decoder = Decoder(_batch_size=batch_size)
+    decoder = Decoder(_batch_size=args.batch_size)
     decoder.train()
     decoder = decoder.to(device)
 
@@ -52,7 +66,7 @@ if __name__=="__main__":
     unnorm = UnNormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     prev_loss = None
-    for epoch in range(nb_epoch):
+    for epoch in range(args.epoch):
         loss_list = []
         for i, (data, label) in enumerate(train_loader):
             # label = label.cuda(async=True)
@@ -71,7 +85,7 @@ if __name__=="__main__":
 
             origin_img = unnorm(input_var[0])
             recon_img = unnorm(output[0])
-            vis.image(origin_img, win="input image",opts=dict(size=(64,64)))
+            vis.image(origin_img, win="input image", opts=dict(size=(64, 64)))
             vis.image(recon_img, win="output image")
 
         cur_loss = np.mean(np.asarray(loss_list))
@@ -80,12 +94,27 @@ if __name__=="__main__":
 
         if prev_loss > cur_loss:
             # save_best_model(True, model, save_path, epoch)
-            torch.save([encoder,decoder], os.path.join(save_path, 'best_ae.pkl'))
-            prev_err = cur_loss
+            torch.save([encoder, decoder], os.path.join(args.save_path, 'best_ae.pkl'))
+            prev_loss = cur_loss
 
         vis.line(X=np.asarray([epoch]), Y=np.asarray([cur_loss]),
                  win=loss_plot, update="append", name='Train Loss')
 
+
+def test():
+    pass
+
+
+if __name__=="__main__":
+    global args
+    args = parser.parse_args()
+
+    if args.mode == "train":
+        train()
+    elif args.mode == "test":
+        test()
+    else:
+        raise WrongSelectError("No Named " + args.mode + "in args")
 
 
 #  A  A
