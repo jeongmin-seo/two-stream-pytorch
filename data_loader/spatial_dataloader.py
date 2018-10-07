@@ -1,11 +1,13 @@
 import random
 import os
+import re
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 
 
 class SpatialDataset(Dataset):
+
     def __init__(self, dic, root_dir, mode, transform=None):
         # Generate a 16 Frame clip
         self.keys = list(dic.keys())
@@ -57,17 +59,46 @@ class SpatialDataset(Dataset):
         return sample
 
 
-class SpatialDataLoader:
-    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num, is_ae=False):
+class RepresentationDataset(SpatialDataset):
+
+    def __init__(self, dic, root_dir, mode, transform=None):
+        # super(SpatialDataset).__init__(dic, root_dir, mode, transform)
+        super().__init__(dic, root_dir, mode, transform)
+        self.values = self.reset_value()
+
+    def __len__(self):
+        return len(self.values)
+
+    def __getitem__(self, idx):
+        data_path = self.values[idx]
+        data = Image.open(data_path)
+        data = self.transform(data)
+
+        return data, data_path
+
+    def reset_value(self):
+        result_list = []
+        for path in self.keys:
+            data_path = os.path.join(self.root_dir, path)
+            for data_name in os.listdir(data_path):
+                if not re.split("[.]+", data_name)[-1] == "jpg":
+                    continue
+
+                save_name = os.path.join(data_path, data_name)
+                result_list.append(save_name)
+
+        return result_list
+
+
+class LoaderInit:
+    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num):
 
         self.BATCH_SIZE = BATCH_SIZE
         self.num_workers = num_workers
         self.data_path = path
         self.text_path = txt_path
         self.split_num = split_num
-        # split the training and testing videos
         self.train_video, self.test_video = self.load_train_test_list()
-        self.is_ae = is_ae
 
     @staticmethod
     def read_text_file(file_path):
@@ -76,7 +107,8 @@ class SpatialDataLoader:
         for line in f.readlines():
             line = line.replace('\n', '')
             split_line = line.split(" ")
-            tmp[split_line[0]] = [int(split_line[1]), int(split_line[2])]  # split[0] is video name and split[1] and [2] are frame num and class label
+            tmp[split_line[0]] = [int(split_line[1]), int(
+                split_line[2])]  # split[0] is video name and split[1] and [2] are frame num and class label
 
         return tmp
 
@@ -89,6 +121,16 @@ class SpatialDataLoader:
 
         return train_video, test_video
 
+
+class SpatialDataLoader(LoaderInit):
+    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num, is_ae=False):
+
+        # super(LoaderInit, self).__init__(BATCH_SIZE, num_workers, path, txt_path, split_num)
+        super().__init__(BATCH_SIZE, num_workers, path, txt_path, split_num)
+        # split the training and testing videos
+        self.is_ae = is_ae
+        self.dic_test_idx = {}
+
     def run(self):
         # self.load_frame_count()
         # self.get_training_dic()
@@ -99,7 +141,7 @@ class SpatialDataLoader:
         return train_loader, val_loader, self.test_video
 
     def val_sample19(self):
-        self.dic_test_idx = {}
+
         for video in self.test_video:
             sampling_interval = int((self.test_video[video][0] - 10 + 1) / 19)
             for index in range(19):
@@ -110,29 +152,29 @@ class SpatialDataLoader:
     def train(self):
         if not self.is_ae:
             training_set = SpatialDataset(dic=self.train_video,
-                                           root_dir=self.data_path,
-                                           mode='train',
-                                           transform=transforms.Compose([
-                                               transforms.Scale([256,256]),
-                                               transforms.RandomCrop(224),
-                                               transforms.RandomHorizontalFlip(),
-                                               transforms.ToTensor(),
-                                               transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                           ]))
+                                          root_dir=self.data_path,
+                                          mode='train',
+                                          transform=transforms.Compose([
+                                              transforms.Scale([256,256]),
+                                              transforms.RandomCrop(224),
+                                              transforms.RandomHorizontalFlip(),
+                                              transforms.ToTensor(),
+                                              transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                          ]))
             print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
         else:
             training_set = SpatialDataset(dic=self.train_video,
-                                           root_dir=self.data_path,
-                                           mode='train',
-                                           transform=transforms.Compose([
-                                               transforms.Scale([64, 64]),
-                                               # transforms.RandomCrop(224),
-                                               # transforms.RandomHorizontalFlip(),
-                                               transforms.ToTensor(),
-                                               transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                                    std=[0.229, 0.224, 0.225])
-                                           ]))
+                                          root_dir=self.data_path,
+                                          mode='train',
+                                          transform=transforms.Compose([
+                                              transforms.Scale([64, 64]),
+                                              # transforms.RandomCrop(224),
+                                              # transforms.RandomHorizontalFlip(),
+                                              transforms.ToTensor(),
+                                              transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                   std=[0.229, 0.224, 0.225])
+                                          ]))
             print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
         train_loader = DataLoader(
@@ -148,13 +190,13 @@ class SpatialDataLoader:
 
     def val(self):
         validation_set = SpatialDataset(dic=self.dic_test_idx,
-                                         root_dir=self.data_path,
-                                         mode='val',
-                                         transform=transforms.Compose([
-                                             transforms.Scale([224, 224]),
-                                             transforms.ToTensor(),
-                                             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                         ]))
+                                        root_dir=self.data_path,
+                                        mode='val',
+                                        transform=transforms.Compose([
+                                            transforms.Scale([224, 224]),
+                                            transforms.ToTensor(),
+                                            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                        ]))
         print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
         # print validation_set[1]
 
@@ -167,9 +209,30 @@ class SpatialDataLoader:
         return val_loader
 
 
-class MakeRepresentationLoader:
-    pass
+class RepresentationLoader(LoaderInit):
+    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num):
+        # super(LoaderInit, self).__init__(BATCH_SIZE, num_workers, path, txt_path, split_num)
+        super().__init__(BATCH_SIZE, num_workers, path, txt_path, split_num)
 
+    def run(self):
+        represent_set = RepresentationDataset(dic=self.train_video,
+                                              root_dir=self.data_path,
+                                              mode='train',
+                                              transform=transforms.Compose([
+                                                  transforms.Scale([64, 64]),
+                                                  # transforms.RandomCrop(224),
+                                                  # transforms.RandomHorizontalFlip(),
+                                                  transforms.ToTensor(),
+                                                  transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                       std=[0.229, 0.224, 0.225])
+                                              ]))
+        loader = DataLoader(
+            dataset=represent_set,
+            batch_size=self.BATCH_SIZE,
+            shuffle=False,
+            num_workers=self.num_workers
+        )
+        return loader
 #  A  A
 # (‘ㅅ‘=)
 # J.M.Seo

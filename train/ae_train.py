@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import os
+import re
 from network.autoencoder_2d import Encoder, Decoder, UnNormalize
 import argparse
 from util.custom_error import WrongSelectError
@@ -22,8 +23,8 @@ parser.add_argument('--text_root', '-t', default='/home/jeongmin/workspace/data/
                     help='path to train test split text files root')
 parser.add_argument('--split_number', default=1, help='select split number', choices=[1, 2, 3])
 parser.add_argument('--save_path', '-s', default='/home/jeongmin/workspace/model/two-stream-pytorch/frame_ae')
-parser.add_argument('--mode', '-m', default='train', choices=["train", "test"])
-parser.add_argument('--batch_size', '-b', default=32)
+parser.add_argument('--mode', '-m', default='test', choices=["train", "test"])
+parser.add_argument('--batch_size', '-b', default=1)
 parser.add_argument('--epoch', '-e', default=10000)
 
 ###################################
@@ -102,10 +103,44 @@ def train():
 
 
 def test():
-    pass
+    result_path = "/home/jeongmin/workspace/data/HMDB51/representation"
+    loader = data_loader.RepresentationLoader(BATCH_SIZE=args.batch_size, num_workers=8,
+                                              path=args.data_root, txt_path=args.text_root, split_num=args.split_number)
+    represetation_loader = loader.run()
+
+    # model load
+    model = torch.load("/home/jeongmin/workspace/model/two-stream-pytorch/frame_ae/best_ae_779epoch.pkl")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    # init encoder
+    encoder = Encoder(_batch_size=args.batch_size)
+    encoder.train()
+    encoder = encoder.to(device)
+    print(model[0])
+    encoder.load_state_dict(model[0].state_dict())
+
+    for i, (data, data_path) in enumerate(represetation_loader):
+        input_var = Variable(data, volatile=True).cuda(async=True)
+        latent = encoder(input_var)
+
+        dir_name = re.split("[/]+", data_path[0])
+        save_path = os.path.join(result_path, dir_name[-3])
+
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+
+        save_path = os.path.join(save_path, dir_name[-2])
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+
+        save_name = os.path.join(save_path, dir_name[-1])
+        save_name = save_name.replace('.jpg', '.npy')
+
+        np.save(save_name, latent.data.cpu().numpy())
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
+
     global args
     args = parser.parse_args()
 
