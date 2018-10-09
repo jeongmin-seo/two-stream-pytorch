@@ -1,5 +1,6 @@
 import torch.nn as nn
 
+
 class Encoder(nn.Module):
 
     def __init__(self, _batch_size, channel=3):
@@ -26,8 +27,6 @@ class Encoder(nn.Module):
             nn.Linear(5000, 2000)
         )
 
-
-
     def forward(self, image):
         out = self.conv(image)
         out = out.view(self.batch_size,-1)
@@ -35,6 +34,7 @@ class Encoder(nn.Module):
 
         # z = flatten1 + flatten2
         return out
+
 
 class Decoder(nn.Module):
 
@@ -70,6 +70,7 @@ class Decoder(nn.Module):
 
         # z = flatten1 + flatten2
         return out
+
 
 class UnNormalize(object):
     def __init__(self, mean, std):

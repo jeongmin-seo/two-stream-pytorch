@@ -5,6 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import torch
 
+
 class SpatialCubeDataset(Dataset):
     def __init__(self, dic, in_channel, root_dir, mode, transform=None):
         # Generate a 16 Frame clip
@@ -18,7 +19,6 @@ class SpatialCubeDataset(Dataset):
         self.img_rows = 112
         self.img_cols = 112
         self.n_label = 51
-
 
     def reset_idx(self, _idx, _n_frame):
         if _idx > _n_frame:
@@ -73,6 +73,7 @@ class SpatialCubeDataset(Dataset):
             raise ValueError('There are only train and val mode')
         return sample
 
+
 class TemporalCubeDataset(SpatialCubeDataset):
     def __init__(self, dic, in_channel, root_dir, mode, transform=None):
         super().__init__(dic, in_channel, root_dir, mode, transform)
@@ -105,6 +106,7 @@ class TemporalCubeDataset(SpatialCubeDataset):
             imgY.close()
 
         return cube
+
 
 class CubeDataLoader:
     def __init__(self, BATCH_SIZE, num_workers, in_channel, path, txt_path, split_num, mode):
@@ -178,8 +180,8 @@ class CubeDataLoader:
                                                mode='train',
                                                transform=transforms.Compose([
                                                    transforms.Scale([68,68]),
-                                                   transforms.ToTensor(),
-                                                   transforms.Normalize(mean=(0.5,), std=(0.5,))
+                                                   transforms.ToTensor()
+                                                   # transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                ]))
             print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
@@ -215,8 +217,8 @@ class CubeDataLoader:
                                                  mode='val',
                                                  transform=transforms.Compose([
                                                      transforms.Scale([68, 68]),
-                                                     transforms.ToTensor(),
-                                                     transforms.Normalize(mean=(0.5,), std=(0.5,))
+                                                     transforms.ToTensor()
+                                                     # transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                  ]))
             print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
 
@@ -227,7 +229,6 @@ class CubeDataLoader:
             num_workers=self.num_workers)
 
         return val_loader
-
 
 
 #  A  A

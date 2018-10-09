@@ -14,13 +14,14 @@ cuda = True if torch.cuda.is_available() else False
 
 # experimental parameters
 # data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
-data_root = "/home/jm/Two-stream_data/HMDB51/original/flow"
-txt_root = "/home/jm/Two-stream_data/HMDB51"
-save_path = "/home/jm/hdd/temporal_gan_model"
+data_root = "/home/jeongmin/workspace/data/HMDB51/flow"
+txt_root = "/home/jeongmin/workspace/data/HMDB51"
+save_path = "/home/jeongmin/workspace/data/HMDB51/model"
 batch_size = 32
 nb_epoch = 10000
 L = 16
 n_class = 51
+
 
 class Generator(nn.Module):
     def __init__(self):
@@ -88,6 +89,7 @@ class Discriminator(nn.Module):
         validity = self.adv_layer(out)
 
         return validity
+
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -162,10 +164,11 @@ if __name__ == "__main__":
             generator_error.append(errG.data[0])
             discriminator_error.append(errD.data[0])
 
-            X = unnorm(fake[0,0,0,:,:])
-            Y = unnorm(fake[0,1,0,:,:])
-            vis.image(X, win="fake image X", opts=dict(size=(68, 68)))
-            vis.image(Y, win="fake image Y", opts=dict(size=(68, 68)))
+            vis.image(fake[0,0,0,:,:], win="fake image X", opts=dict(size=(68, 68)))
+            vis.image(fake[0,1,0,:,:], win="fake image Y", opts=dict(size=(68, 68)))
+
+            vis.image(input_var[0,0,0,:,:], win="real image X", opts=dict(size=(68, 68)))
+            vis.image(input_var[0,1,0,:,:], win="real image Y", opts=dict(size=(68, 68)))
 
         generator_model_err = np.mean(np.asarray(generator_error))
         discriminator_model_err = np.mean(np.asarray(discriminator_error))
