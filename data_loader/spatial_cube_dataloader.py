@@ -53,7 +53,7 @@ class SpatialCubeDataset(Dataset):
         cur_key = self.keys[idx]
         nb_frame = self.dic[cur_key][0]
         if self.mode == 'train':
-            self.clips_idx = random.randint(1, int(nb_frame - self.in_channel + 1))
+            self.clips_idx = random.randint(1, int(nb_frame - self.in_channel))
             self.video = cur_key.split('/')[0]
         elif self.mode == 'val':
             split_key = cur_key.split('-')
@@ -73,9 +73,41 @@ class SpatialCubeDataset(Dataset):
             raise ValueError('There are only train and val mode')
         return sample
 
+class TemporalCubeDataset(SpatialCubeDataset):
+    def __init__(self, dic, in_channel, root_dir, mode, transform=None):
+        super().__init__(dic, in_channel, root_dir, mode, transform)
+        self.img_rows = 68
+        self.img_cols = 68
 
-class SpatialCubeDataLoader:
-    def __init__(self, BATCH_SIZE, num_workers, in_channel, path, txt_path, split_num):
+    def stack_frame(self, keys, _n_frame):
+        video_path = os.path.join(self.root_dir, keys.split('-')[0])
+
+        cube = torch.FloatTensor(2, self.in_channel, self.img_rows, self.img_cols)
+        i = int(self.clips_idx)
+
+        for j in range(self.in_channel):
+            idx = i + j
+            frame_idx = "%05d.jpg" % idx
+            # frame_idx = 'frame' + idx.zfill(6)
+            x_image = os.path.join(video_path, 'flow_x_' + frame_idx)
+            y_image = os.path.join(video_path, 'flow_y_' + frame_idx)
+
+            imgX = (Image.open(x_image))
+            imgY = (Image.open(y_image))
+
+            X = self.transform(imgX)
+            Y = self.transform(imgY)
+
+            cube[0, j, :, :] = X
+            cube[1, j, :, :] = Y
+
+            imgX.close()
+            imgY.close()
+
+        return cube
+
+class CubeDataLoader:
+    def __init__(self, BATCH_SIZE, num_workers, in_channel, path, txt_path, split_num, mode):
 
         self.BATCH_SIZE = BATCH_SIZE
         self.num_workers = num_workers
@@ -83,6 +115,7 @@ class SpatialCubeDataLoader:
         self.data_path = path
         self.text_path = txt_path
         self.split_num = split_num
+        self.mode = mode
         # split the training and testing videos
         self.train_video, self.test_video = self.load_train_test_list()
 
@@ -123,21 +156,32 @@ class SpatialCubeDataLoader:
                 self.dic_test_idx[key] = self.test_video[video]
 
     def train(self):
-        training_set = SpatialCubeDataset(dic=self.train_video,
-                                          in_channel=self.in_channel,
-                                          root_dir=self.data_path,
-                                          mode='train',
-                                          transform=transforms.Compose([
-                                              transforms.Scale([112,112]),
-                                              #transforms.RandomCrop(224),
-                                              # transforms.RandomHorizontalFlip(),
-                                              # transforms.Grayscale(),
-                                              transforms.ToTensor(),
-                                              transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                                   std=[0.229, 0.224, 0.225])
+        if self.mode == "spatial":
+            training_set = SpatialCubeDataset(dic=self.train_video,
+                                              in_channel=self.in_channel,
+                                              root_dir=self.data_path,
+                                              mode='train',
+                                              transform=transforms.Compose([
+                                                  transforms.Scale([112,112]),
+                                                  #transforms.RandomCrop(224),
+                                                  # transforms.RandomHorizontalFlip(),
+                                                  # transforms.Grayscale(),
+                                                  transforms.ToTensor()
 
-                                          ]))
-        print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
+                                              ]))
+            print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
+
+        elif self.mode == "temporal":
+            training_set = TemporalCubeDataset(dic=self.train_video,
+                                               in_channel=self.in_channel,
+                                               root_dir=self.data_path,
+                                               mode='train',
+                                               transform=transforms.Compose([
+                                                   transforms.Scale([68,68]),
+                                                   transforms.ToTensor(),
+                                                   transforms.Normalize(mean=(0.5,), std=(0.5,))
+                                               ]))
+            print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
         train_loader = DataLoader(
             dataset=training_set,
@@ -150,18 +194,31 @@ class SpatialCubeDataLoader:
         return train_loader
 
     def val(self):
-        validation_set = SpatialCubeDataset(dic=self.dic_test_idx,
-                                            in_channel=self.in_channel,
-                                            root_dir=self.data_path,
-                                            mode='val',
-                                            transform=transforms.Compose([
-                                                transforms.Scale([112, 112]),
-                                                # transforms.Grayscale(),
-                                                transforms.ToTensor(),
-                                                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                            ]))
-        print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
-        # print validation_set[1]
+        if self.mode == "spatial":
+            validation_set = SpatialCubeDataset(dic=self.dic_test_idx,
+                                                in_channel=self.in_channel,
+                                                root_dir=self.data_path,
+                                                mode='val',
+                                                transform=transforms.Compose([
+                                                    transforms.Scale([112, 112]),
+                                                    # transforms.Grayscale(),
+                                                    transforms.ToTensor(),
+                                                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                                ]))
+            print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
+            # print validation_set[1]
+
+        elif self.mode == "temporal":
+            validation_set = TemporalCubeDataset(dic=self.dic_test_idx,
+                                                 in_channel=self.in_channel,
+                                                 root_dir=self.data_path,
+                                                 mode='val',
+                                                 transform=transforms.Compose([
+                                                     transforms.Scale([68, 68]),
+                                                     transforms.ToTensor(),
+                                                     transforms.Normalize(mean=(0.5,), std=(0.5,))
+                                                 ]))
+            print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
 
         val_loader = DataLoader(
             dataset=validation_set,
@@ -170,6 +227,8 @@ class SpatialCubeDataLoader:
             num_workers=self.num_workers)
 
         return val_loader
+
+
 
 #  A  A
 # (‘ㅅ‘=)

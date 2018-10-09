@@ -76,7 +76,7 @@ class motion_dataset(Dataset):
         return sample
 
 
-class Motion_DataLoader():
+class MotionDataLoader():
     def __init__(self, BATCH_SIZE, num_workers, in_channel, path, txt_path, split_num):
 
         self.BATCH_SIZE = BATCH_SIZE
