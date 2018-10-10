@@ -15,9 +15,9 @@ from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
 txt_root = "/home/jm/Two-stream_data/HMDB51"
 save_path = "/home/jm/workspace/two-stream-pytorch/spatial_cube_model"
-batch_size = 1
+batch_size = 4
 nb_epoch = 10000
-L = 16
+L = 32
 n_class = 51
 
 # C3D Model
@@ -165,13 +165,13 @@ def main():
     if not os.path.isdir(save_path):
         os.makedirs(save_path)
 
-    loader = data_loader.SpatialCubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
-                                               path=data_root, txt_path=txt_root, split_num=1)
+    loader = data_loader.CubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
+                                        path=data_root, txt_path=txt_root, split_num=1,mode='spatial')
 
     train_loader, test_loader, test_video = loader.run()
 
     # model = resnet_3d.resnet18(sample_size=112, sample_duration=L)
-    model = resnet_3d.resnet34(sample_size=112, sample_duration=L)
+    model = resnet_3d.resnet34(sample_size=112, sample_duration=32)
 
     criterion = nn.CrossEntropyLoss().cuda()
     # optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=2e-4)
@@ -192,7 +192,7 @@ def main():
         is_best = val_acc > cur_best_acc
         if is_best:
             cur_best_acc = val_acc
-            with open('./spatial_cube_model/spatial_video_preds.pickle', 'wb') as f:
+            with open('../spatial_cube_model/spatial_cube_preds.pickle', 'wb') as f:
                 pickle.dump(video_level_pred, f)
             f.close()
 

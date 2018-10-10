@@ -3,7 +3,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torch
 import data_loader.spatial_cube_dataloader as data_loader
-from network.autoencoder_2d import UnNormalize
+import torchvision.transforms as transforms
 # import data_loader.spatial_cube_dataloader as data_loader
 # from util import save_best_model
 import numpy as np
@@ -14,9 +14,9 @@ cuda = True if torch.cuda.is_available() else False
 
 # experimental parameters
 # data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
-data_root = "/home/jeongmin/workspace/data/HMDB51/flow"
-txt_root = "/home/jeongmin/workspace/data/HMDB51"
-save_path = "/home/jeongmin/workspace/data/HMDB51/model"
+data_root = "/home/jm/Two-stream_data/HMDB51/original/flow"
+txt_root = "/home/jm/Two-stream_data/HMDB51"
+save_path = "/home/jm/hdd/temporal_gan_model"
 batch_size = 32
 nb_epoch = 10000
 L = 16
@@ -27,7 +27,7 @@ class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
 
-        self.init_size = 1# 6
+        self.init_size = 3# 6
         self.init_channel = 4
         # self.l1 = nn.Sequential(nn.Linear(5000, 512 * self.init_channel * self.init_size * self.init_size))
         self.l1 = nn.Sequential(nn.Linear(2048, 512 * self.init_channel * self.init_size * self.init_size))
@@ -38,10 +38,10 @@ class Generator(nn.Module):
             nn.ConvTranspose3d(256, 256, kernel_size=3),
             nn.ReLU(True),
 
-            nn.ConvTranspose3d(256, 128, kernel_size=(3, 5, 5), stride=(1,2,2)),
+            nn.ConvTranspose3d(256, 128, kernel_size=3, stride=(1,2,2)),
             nn.ReLU(True),
 
-            nn.ConvTranspose3d(128, 64, kernel_size=(3, 7, 7), stride=(1,2,2)),
+            nn.ConvTranspose3d(128, 64, kernel_size=3, stride=(1,2,2)),
             nn.ReLU(True),
 
             # nn.ConvTranspose3d(64, 3, kernel_size=(5, 8, 8), stride=(1,2,2)),
@@ -118,10 +118,12 @@ if __name__ == "__main__":
 
     # set optimizer
     criterion = nn.BCELoss()
-    optimizerD = optim.Adam(discriminator.parameters(), lr=0.001, betas=(0.5, 0.999))
-    optimizerG = optim.Adam(generator.parameters(), lr=0.002, betas=(0.5, 0.999))
+    optimizerD = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.999))
+    optimizerG = optim.Adam(generator.parameters(), lr=0.001, betas=(0.5, 0.999))
 
-    unnorm = UnNormalize(mean=[0.5,], std=[0.5,])
+    invTrans = transforms.Compose([#transforms.ToTensor(),
+                                   transforms.Normalize(mean=[0.,], std=[1/0.5,]),
+                                   transforms.Normalize(mean=[-0.5,], std=[1., ])])
 
     prev_err = None
     for epoch in range(nb_epoch):
@@ -154,7 +156,7 @@ if __name__ == "__main__":
             # generator train
             generator.zero_grad()
             # target = Variable(torch.ones(input_var.size()[0])*51).cuda()
-            target = Variable(torch.zeros(input_var.size()[0])).cuda()
+            target = Variable(torch.ones(input_var.size()[0])).cuda()
             output = discriminator(fake)
             errG = criterion(output, target)
             errG.backward()
@@ -164,11 +166,15 @@ if __name__ == "__main__":
             generator_error.append(errG.data[0])
             discriminator_error.append(errD.data[0])
 
-            vis.image(fake[0,0,0,:,:], win="fake image X", opts=dict(size=(68, 68)))
-            vis.image(fake[0,1,0,:,:], win="fake image Y", opts=dict(size=(68, 68)))
+            fakeX = invTrans(fake[0,0,0:3,:,:])   # because, pytorch transform recognize only 3-dimension data as an image
+            fakeY = invTrans(fake[0,1,0:3,:,:])   # because, pytorch transform recognize only 3-dimension data as an image
+            vis.image(fakeX[0,:,:], win="fake image X", opts=dict(size=(68, 68)))
+            vis.image(fakeY[0,:,:], win="fake image Y", opts=dict(size=(68, 68)))
 
-            vis.image(input_var[0,0,0,:,:], win="real image X", opts=dict(size=(68, 68)))
-            vis.image(input_var[0,1,0,:,:], win="real image Y", opts=dict(size=(68, 68)))
+            realX = invTrans(input_var[0,0,0:3,:,:])   # because, pytorch transform recognize only 3-dimension data as an image
+            realY = invTrans(input_var[0,1,0:3,:,:])    # because, pytorch transform recognize only 3-dimension data as an image
+            vis.image(realX[0,:,:], win="real image X", opts=dict(size=(68, 68)))
+            vis.image(realY[0,:,:], win="real image Y", opts=dict(size=(68, 68)))
 
         generator_model_err = np.mean(np.asarray(generator_error))
         discriminator_model_err = np.mean(np.asarray(discriminator_error))

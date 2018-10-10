@@ -33,8 +33,8 @@ class SpatialCubeDataset(Dataset):
         i = int(self.clips_idx)
 
         for j in range(self.in_channel):
-            # idx = self.reset_idx(i + j, _n_frame)
-            idx = i + j
+            idx = self.reset_idx(i + j, _n_frame)
+            # idx = i + j
             frame_idx = "image_%05d.jpg" % idx
             image = os.path.join(video_path, frame_idx)
             img = (Image.open(image))
@@ -53,7 +53,8 @@ class SpatialCubeDataset(Dataset):
         cur_key = self.keys[idx]
         nb_frame = self.dic[cur_key][0]
         if self.mode == 'train':
-            self.clips_idx = random.randint(1, int(nb_frame - self.in_channel))
+            # self.clips_idx = random.randint(1, int(nb_frame - self.in_channel))
+            self.clips_idx = random.randint(1, int(nb_frame))
             self.video = cur_key.split('/')[0]
         elif self.mode == 'val':
             split_key = cur_key.split('-')
@@ -168,7 +169,9 @@ class CubeDataLoader:
                                                   #transforms.RandomCrop(224),
                                                   # transforms.RandomHorizontalFlip(),
                                                   # transforms.Grayscale(),
-                                                  transforms.ToTensor()
+                                                  transforms.ToTensor(),
+                                                  transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                       std=[0.229, 0.224, 0.225])
 
                                               ]))
             print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
@@ -180,8 +183,8 @@ class CubeDataLoader:
                                                mode='train',
                                                transform=transforms.Compose([
                                                    transforms.Scale([68,68]),
-                                                   transforms.ToTensor()
-                                                   # transforms.Normalize(mean=(0.5,), std=(0.5,))
+                                                   transforms.ToTensor(),
+                                                   transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                ]))
             print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
@@ -217,8 +220,8 @@ class CubeDataLoader:
                                                  mode='val',
                                                  transform=transforms.Compose([
                                                      transforms.Scale([68, 68]),
-                                                     transforms.ToTensor()
-                                                     # transforms.Normalize(mean=(0.5,), std=(0.5,))
+                                                     transforms.ToTensor(),
+                                                     transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                  ]))
             print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
 
