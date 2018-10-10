@@ -7,7 +7,7 @@ import torch
 
 
 class SpatialCubeDataset(Dataset):
-    def __init__(self, dic, in_channel, root_dir, mode, transform=None):
+    def __init__(self, dic, in_channel, root_dir, mode, model_mode, transform=None):
         # Generate a 16 Frame clip
         self.keys = list(dic.keys())
         self.values = list(dic.values())
@@ -15,9 +15,10 @@ class SpatialCubeDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.mode = mode
+        self.model_mode = model_mode
         self.in_channel = in_channel
-        self.img_rows = 112
-        self.img_cols = 112
+        self.img_rows = 108# 224# 112
+        self.img_cols = 108# 224# 112
         self.n_label = 51
 
     def reset_idx(self, _idx, _n_frame):
@@ -26,11 +27,11 @@ class SpatialCubeDataset(Dataset):
         else:
             return _idx
 
-    def stack_frame(self, keys, _n_frame):
+    def stack_frame(self, keys, _n_frame, _idx):
         video_path = os.path.join(self.root_dir, keys.split('-')[0])
 
         cube = torch.FloatTensor(3, self.in_channel,self.img_rows, self.img_cols)
-        i = int(self.clips_idx)
+        i = int(_idx)
 
         for j in range(self.in_channel):
             idx = self.reset_idx(i + j, _n_frame)
@@ -54,8 +55,14 @@ class SpatialCubeDataset(Dataset):
         nb_frame = self.dic[cur_key][0]
         if self.mode == 'train':
             # self.clips_idx = random.randint(1, int(nb_frame - self.in_channel))
-            self.clips_idx = random.randint(1, int(nb_frame))
+            if self.model_mode == 'tsn':
+                self.clips_idx = [random.randint(1, int(nb_frame / 3)),
+                                  random.randint(int(nb_frame / 3), int(2 * nb_frame / 3)),
+                                  random.randint(int(2 * nb_frame / 3), int(nb_frame))]  # TSN
+            else:
+                self.clips_idx = random.randint(1, int(nb_frame))
             self.video = cur_key.split('/')[0]
+
         elif self.mode == 'val':
             split_key = cur_key.split('-')
             self.video = split_key[0]
@@ -64,7 +71,14 @@ class SpatialCubeDataset(Dataset):
             raise ValueError('There are only train and val mode')
 
         label = self.dic[cur_key][1]
-        data = self.stack_frame(cur_key, nb_frame)
+
+        if self.model_mode == 'tsn' and self.mode == 'train':
+            data = []
+            for idx in self.clips_idx:
+                data.append(self.stack_frame(cur_key, nb_frame, idx))
+        else:
+            data = self.stack_frame(cur_key, nb_frame, self.clips_idx)
+
 
         if self.mode == 'train':
             sample = (data, label)
@@ -81,11 +95,11 @@ class TemporalCubeDataset(SpatialCubeDataset):
         self.img_rows = 68
         self.img_cols = 68
 
-    def stack_frame(self, keys, _n_frame):
+    def stack_frame(self, keys, _n_frame, _idx):
         video_path = os.path.join(self.root_dir, keys.split('-')[0])
 
         cube = torch.FloatTensor(2, self.in_channel, self.img_rows, self.img_cols)
-        i = int(self.clips_idx)
+        i = int(_idx)
 
         for j in range(self.in_channel):
             idx = i + j
@@ -165,7 +179,8 @@ class CubeDataLoader:
                                               root_dir=self.data_path,
                                               mode='train',
                                               transform=transforms.Compose([
-                                                  transforms.Scale([112,112]),
+                                                  # transforms.Scale([112,112]),
+                                                  transforms.Scale([108,108]),
                                                   #transforms.RandomCrop(224),
                                                   # transforms.RandomHorizontalFlip(),
                                                   # transforms.Grayscale(),
@@ -173,8 +188,8 @@ class CubeDataLoader:
                                                   transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                        std=[0.229, 0.224, 0.225])
 
-                                              ]))
-            print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
+                                              ]), model_mode='tsn')
+            print('==> Training data :', len(training_set), ' videos', training_set[1][0][0].size())
 
         elif self.mode == "temporal":
             training_set = TemporalCubeDataset(dic=self.train_video,
@@ -205,11 +220,12 @@ class CubeDataLoader:
                                                 root_dir=self.data_path,
                                                 mode='val',
                                                 transform=transforms.Compose([
-                                                    transforms.Scale([112, 112]),
+                                                    # transforms.Scale([112, 112]),
+                                                    transforms.Scale([108,108]),
                                                     # transforms.Grayscale(),
                                                     transforms.ToTensor(),
                                                     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                                ]))
+                                                ]), model_mode='tsn')
             print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
             # print validation_set[1]
 

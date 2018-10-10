@@ -6,6 +6,7 @@ import visdom
 import numpy as np
 import os
 import pickle
+import copy
 from network import resnet_3d
 import data_loader.spatial_cube_dataloader as data_loader
 from util.util import accuracy, frame2_video_level_accuracy, save_best_model
@@ -17,7 +18,7 @@ txt_root = "/home/jm/Two-stream_data/HMDB51"
 save_path = "/home/jm/workspace/two-stream-pytorch/spatial_cube_model"
 batch_size = 4
 nb_epoch = 10000
-L = 32
+L = 16
 n_class = 51
 
 # C3D Model
@@ -126,6 +127,37 @@ def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epoc
 
     return float(sum(accuracy_list) / len(accuracy_list)), float(sum(loss_list) / len(loss_list)), _model
 
+def train_tsn_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
+    print('==> Epoch:[{0}/{1}][training stage]'.format(_epoch, _nb_epochs))
+
+    accuracy_list = []
+    loss_list = []
+    _model.train()
+    for i, (data, label) in enumerate(_train_loader):
+        label = label.cuda()
+        # input_var = Variable(data).cuda()
+        target_var = Variable(label).cuda().long()
+
+        loss = 0
+        prec = 0
+        for dat in data:
+            input_var = Variable(dat).cuda()
+            output = _model(input_var)
+            loss += _loss_func(output, target_var)
+
+            # measure accuracy and record loss
+            prec += accuracy(output.data, label)
+
+        loss_list.append(loss)
+        accuracy_list.append(float(prec)/3)
+
+        # compute gradient and do SGD step
+        _optimizer.zero_grad()
+        loss.backward()
+        _optimizer.step()
+
+    return float(sum(accuracy_list) / len(accuracy_list)), float(sum(loss_list) / len(loss_list)), _model
+
 def val_1epoch(_model, _val_loader, _criterion, _epoch, _nb_epochs):
     print('==> Epoch:[{0}/{1}][validation stage]'.format(_epoch, _nb_epochs))
 
@@ -171,17 +203,30 @@ def main():
     train_loader, test_loader, test_video = loader.run()
 
     # model = resnet_3d.resnet18(sample_size=112, sample_duration=L)
-    model = resnet_3d.resnet34(sample_size=112, sample_duration=32)
+    # model = resnet_3d.resnet34(sample_size=112, sample_duration=32)
+    state_dict = torch.load(os.path.join(save_path, "resnet-101-kinetics-hmdb51_split1.pth"))
+    model = resnet_3d.resnet101(sample_size=108, sample_duration=L)
+
+    new_state_dict = copy.deepcopy(state_dict)
+    for key in state_dict['state_dict'].keys():
+        new_key = key.split('.', 1)[1]
+        new_state_dict['state_dict'][new_key] = state_dict['state_dict'][key]
+        del new_state_dict['state_dict'][key]
+    del state_dict
+
+    model.load_state_dict(new_state_dict['state_dict'])
+    parameters = resnet_3d.get_fine_tuning_parameters(model, 50)
 
     criterion = nn.CrossEntropyLoss().cuda()
     # optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=2e-4)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(parameters, lr=0.001)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 
     model = model.to(device)
     cur_best_acc = 0
     for epoch in range(nb_epoch+1):
-        train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
+        # train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
+        train_acc, train_loss, model = train_tsn_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
         print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
         val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, nb_epoch)
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
