@@ -185,8 +185,8 @@ class CubeDataLoader:
                                                   # transforms.RandomHorizontalFlip(),
                                                   # transforms.Grayscale(),
                                                   transforms.ToTensor(),
-                                                  transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                                       std=[0.229, 0.224, 0.225])
+                                                  # transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                  #                      std=[0.229, 0.224, 0.225])
 
                                               ]), model_mode='tsn')
             print('==> Training data :', len(training_set), ' videos', training_set[1][0][0].size())
@@ -224,7 +224,7 @@ class CubeDataLoader:
                                                     transforms.Scale([108,108]),
                                                     # transforms.Grayscale(),
                                                     transforms.ToTensor(),
-                                                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                                    # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                                 ]), model_mode='tsn')
             print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
             # print validation_set[1]

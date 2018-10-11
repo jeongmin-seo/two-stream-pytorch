@@ -145,14 +145,14 @@ def train_tsn_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_
             if i == 0:
                 output = _model(input_var)
             else:
-                output += _model(input_var)
+                output = output + _model(input_var)
         loss = _loss_func(output/3, target_var)
 
         # measure accuracy and record loss
         prec = accuracy(output.data, label)
 
         loss_list.append(loss)
-        accuracy_list.append(float(prec)/3)
+        accuracy_list.append(float(prec))
 
         # compute gradient and do SGD step
         _optimizer.zero_grad()
@@ -210,6 +210,7 @@ def main():
     state_dict = torch.load(os.path.join(save_path, "resnet-101-kinetics-hmdb51_split1.pth"))
     model = resnet_3d.resnet101(sample_size=108, sample_duration=L)
 
+
     new_state_dict = copy.deepcopy(state_dict)
     for key in state_dict['state_dict'].keys():
         new_key = key.split('.', 1)[1]
@@ -218,8 +219,7 @@ def main():
     del state_dict
 
     model.load_state_dict(new_state_dict['state_dict'])
-    parameters = resnet_3d.get_fine_tuning_parameters(model, 20)
-
+    parameters = resnet_3d.get_fine_tuning_parameters(model, 2)
 
     # modified
     in_feature = model.fc.in_features
