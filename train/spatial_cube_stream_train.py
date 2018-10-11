@@ -140,13 +140,16 @@ def train_tsn_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_
 
         loss = 0
         prec = 0
-        for dat in data:
+        for i, dat in enumerate(data):
             input_var = Variable(dat).cuda()
-            output = _model(input_var)
-            loss += _loss_func(output, target_var)
+            if i == 0:
+                output = _model(input_var)
+            else:
+                output += _model(input_var)
+        loss = _loss_func(output/3, target_var)
 
-            # measure accuracy and record loss
-            prec += accuracy(output.data, label)
+        # measure accuracy and record loss
+        prec = accuracy(output.data, label)
 
         loss_list.append(loss)
         accuracy_list.append(float(prec)/3)
@@ -215,7 +218,15 @@ def main():
     del state_dict
 
     model.load_state_dict(new_state_dict['state_dict'])
-    parameters = resnet_3d.get_fine_tuning_parameters(model, 50)
+    parameters = resnet_3d.get_fine_tuning_parameters(model, 20)
+
+
+    # modified
+    in_feature = model.fc.in_features
+    model.fc = nn.Sequential(
+        nn.Linear(in_feature, n_class),
+        nn.Softmax()
+    )
 
     criterion = nn.CrossEntropyLoss().cuda()
     # optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=2e-4)
