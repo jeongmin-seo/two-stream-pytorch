@@ -13,12 +13,12 @@ from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 
 
 # experimental parameters
-data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
-txt_root = "/home/jm/Two-stream_data/HMDB51"
-save_path = "/home/jm/workspace/two-stream-pytorch/spatial_cube_model"
-batch_size = 4
+data_root = "/home/mlpa/ssd/HMDB51/frames"
+txt_root = "/home/mlpa/ssd/HMDB51"
+save_path = "/home/mlpa/Workspace/github/two-stream-pytorch/spatial_cube_model"
+batch_size = 2
 nb_epoch = 10000
-L = 16
+L = 32
 n_class = 51
 
 # C3D Model
@@ -207,8 +207,10 @@ def main():
 
     # model = resnet_3d.resnet18(sample_size=112, sample_duration=L)
     # model = resnet_3d.resnet34(sample_size=112, sample_duration=32)
-    state_dict = torch.load(os.path.join(save_path, "resnet-101-kinetics-hmdb51_split1.pth"))
-    model = resnet_3d.resnet101(sample_size=108, sample_duration=L)
+    state_dict = torch.load(os.path.join(save_path, "resnet-152-kinetics.pth"))
+    model = resnet_3d.resnet152(sample_size=224, sample_duration=L, num_classes=400)
+
+    model.fc.out_features = n_class
 
 
     new_state_dict = copy.deepcopy(state_dict)
@@ -219,7 +221,8 @@ def main():
     del state_dict
 
     model.load_state_dict(new_state_dict['state_dict'])
-    parameters = resnet_3d.get_fine_tuning_parameters(model, 2)
+
+    # parameters = resnet_3d.get_fine_tuning_parameters(model, 2)
 
     # modified
     in_feature = model.fc.in_features
@@ -228,10 +231,13 @@ def main():
         nn.Softmax()
     )
 
+    parameters = resnet_3d.get_fine_tuning_parameters(model, 40)
+
+
     criterion = nn.CrossEntropyLoss().cuda()
     # optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=2e-4)
     optimizer = torch.optim.SGD(parameters, lr=0.001)
-    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
+    # scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 
     model = model.to(device)
     cur_best_acc = 0
@@ -243,7 +249,7 @@ def main():
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
 
         # lr scheduler
-        scheduler.step(val_loss)
+        # scheduler.step(val_loss)
 
         is_best = val_acc > cur_best_acc
         if is_best:
