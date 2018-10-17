@@ -17,8 +17,8 @@ class SpatialCubeDataset(Dataset):
         self.mode = mode
         self.model_mode = model_mode
         self.in_channel = in_channel
-        self.img_rows = 224# 112
-        self.img_cols = 224# 112
+        self.img_rows = 108# 224# 112
+        self.img_cols = 108# 224# 112
         self.n_label = 51
 
     def reset_idx(self, _idx, _n_frame):
@@ -179,8 +179,9 @@ class CubeDataLoader:
                                               root_dir=self.data_path,
                                               mode='train',
                                               transform=transforms.Compose([
-                                                  # transforms.Scale([112,112]),
-                                                  transforms.Scale([224,224]),
+                                                  transforms.Scale([118,118]),
+                                                  # transforms.Scale([108,108]),
+                                                  transforms.RandomCrop(108),
                                                   #transforms.RandomCrop(224),
                                                   # transforms.RandomHorizontalFlip(),
                                                   # transforms.Grayscale(),
@@ -220,8 +221,9 @@ class CubeDataLoader:
                                                 root_dir=self.data_path,
                                                 mode='val',
                                                 transform=transforms.Compose([
-                                                    # transforms.Scale([112, 112]),
-                                                    transforms.Scale([224,224]),
+                                                    transforms.Scale([118, 118]),
+                                                    # transforms.Scale([108,108]),
+                                                    transforms.RandomCrop(108),
                                                     # transforms.Grayscale(),
                                                     transforms.ToTensor(),
                                                     # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
