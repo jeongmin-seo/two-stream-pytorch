@@ -16,7 +16,7 @@ from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
 txt_root = "/home/jm/Two-stream_data/HMDB51"
 save_path = "/home/jm/hdd/spatial_cube_model"
-batch_size = 2
+batch_size = 4
 nb_epoch = 10000
 L = 16# 32
 n_class = 51
@@ -170,8 +170,9 @@ def val_1epoch(_model, _val_loader, _criterion, _epoch, _nb_epochs):
     for i, (video, data, label) in enumerate(_val_loader):
 
         label = label.cuda(async=True)
-        input_var = Variable(data, volatile=True).cuda(async=True)
-        target_var = Variable(label, volatile=True).cuda(async=True)
+        with torch.no_grad():
+            input_var = Variable(data).cuda(async=True)
+            target_var = Variable(label).cuda(async=True)
 
         # compute output
         output = _model(input_var)

@@ -41,7 +41,6 @@ class SpatialCubeDataset(Dataset):
             img = (Image.open(image))
 
             X = self.transform(img)
-
             cube[:, j, :, :] = X
             img.close()
         return cube
@@ -179,9 +178,10 @@ class CubeDataLoader:
                                               root_dir=self.data_path,
                                               mode='train',
                                               transform=transforms.Compose([
-                                                  transforms.Scale([118,118]),
+                                                  transforms.Resize([118, 118]),
+                                                  # transforms.Scale([118,118]),
                                                   # transforms.Scale([108,108]),
-                                                  transforms.RandomCrop(108),
+                                                  transforms.RandomCrop([108, 108]),
                                                   #transforms.RandomCrop(224),
                                                   # transforms.RandomHorizontalFlip(),
                                                   # transforms.Grayscale(),
@@ -198,7 +198,8 @@ class CubeDataLoader:
                                                root_dir=self.data_path,
                                                mode='train',
                                                transform=transforms.Compose([
-                                                   transforms.Scale([68,68]),
+                                                   # transforms.Scale([68,68]),
+                                                   transforms.Resize(68),
                                                    transforms.ToTensor(),
                                                    transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                ]))
@@ -221,10 +222,8 @@ class CubeDataLoader:
                                                 root_dir=self.data_path,
                                                 mode='val',
                                                 transform=transforms.Compose([
-                                                    transforms.Scale([118, 118]),
                                                     # transforms.Scale([108,108]),
-                                                    transforms.RandomCrop(108),
-                                                    # transforms.Grayscale(),
+                                                    transforms.Resize([108,108]),
                                                     transforms.ToTensor(),
                                                     # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                                 ]), model_mode='tsn')
@@ -237,7 +236,8 @@ class CubeDataLoader:
                                                  root_dir=self.data_path,
                                                  mode='val',
                                                  transform=transforms.Compose([
-                                                     transforms.Scale([68, 68]),
+                                                     #transforms.Scale([68, 68]),
+                                                     transforms.Resize(68),
                                                      transforms.ToTensor(),
                                                      transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                  ]))
