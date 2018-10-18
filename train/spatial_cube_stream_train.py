@@ -195,8 +195,10 @@ def val_1epoch(_model, _val_loader, _criterion, _epoch, _nb_epochs):
 def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     vis = visdom.Visdom()
-    loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
-    acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
+    train_acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
+    train_loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
+    val_loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
+    val_acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
     if not os.path.isdir(save_path):
         os.makedirs(save_path)
@@ -236,13 +238,13 @@ def main():
         nn.Softmax()
     )
     """
-    parameters = resnet_3d.get_fine_tuning_parameters(model, 40)
+    parameters = resnet_3d.get_fine_tuning_parameters(model, 3)
 
 
     criterion = nn.CrossEntropyLoss().cuda()
-    # optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=2e-4)
-    optimizer = torch.optim.SGD(parameters, lr=0.001)
-    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
+    optimizer = torch.optim.Adam(parameters, betas=(0.5,0.999), lr=2e-4)
+    # optimizer = torch.optim.SGD(parameters, lr=0.001)
+    # scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 
     model = model.to(device)
     cur_best_acc = 0
@@ -254,7 +256,7 @@ def main():
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
 
         # lr scheduler
-        scheduler.step(val_loss)
+        # scheduler.step(val_loss)
 
         is_best = val_acc > cur_best_acc
         if is_best:
@@ -264,13 +266,13 @@ def main():
             f.close()
 
         vis.line(X=np.asarray([epoch]), Y=np.asarray([train_loss]),
-                 win=loss_plot, update="append", name='Train Loss')
+                 win=train_loss_plot, update="append", name='Train Loss')
         vis.line(X=np.asarray([epoch]), Y=np.asarray([train_acc]),
-                 win=acc_plot, update="append", name="Train Accuracy")
+                 win=train_acc_plot, update="append", name="Train Accuracy")
         vis.line(X=np.asarray([epoch]), Y=np.asarray([val_loss]),
-                 win=loss_plot, update="append", name='Validation Loss')
+                 win=val_loss_plot, update="append", name='Validation Loss')
         vis.line(X=np.asarray([epoch]), Y=np.asarray([val_acc]),
-                 win=acc_plot, update="append", name="Validation Accuracy")
+                 win=val_acc_plot, update="append", name="Validation Accuracy")
         save_best_model(is_best, model, save_path, epoch)
 
 

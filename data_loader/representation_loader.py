@@ -1,16 +1,18 @@
 import os
 import re
 import numpy as np
+import random
 from torch.utils.data import Dataset, DataLoader
 import torch
 import torchvision.transforms as transforms
 
 class RepresentationDataset(Dataset):
 
-    def __init__(self, video_dic, root_dir):
+    def __init__(self, video_dic, root_dir, stack_size):
         self.v_list = list(video_dic.keys())
         self.video_info = video_dic
         self.data_root = root_dir
+        self.stack_size = stack_size
 
     def __len__(self):
         return len(self.v_list)
@@ -20,7 +22,8 @@ class RepresentationDataset(Dataset):
         cur_video_info = self.video_info[video_root]
         video_root = os.path.join(self.data_root, video_root)
         file_list = sorted(os.listdir(video_root))
-
+        n_frame = len(file_list)
+        start_num = random.randint(1, n_frame - self.stack_size)
         """
         for file_name in file_list:
             if not re.split("[.]+", file_name)[-1] == "npy":
@@ -32,20 +35,13 @@ class RepresentationDataset(Dataset):
             else:
                 dat = np.hstack((dat, np.load(os.path.join(video_root, file_name))))
         """
-        dat = torch.FloatTensor(cur_video_info[0], 2000)
-        for i in range(1, cur_video_info[0]+1):
-            file_name = "image_%05d.npy" % i
 
-            dat[i-1, :] = torch.from_numpy(np.load(os.path.join(video_root, file_name)))
-            """
-            if i == 1:
-                dat = np.load(os.path.join(video_root, file_name))
-                dat[i-1,:] = np.load(os.path.join(video_root, file_name))
+        dat = torch.FloatTensor(self.stack_size, 2000)
+        for i in range(self.stack_size):
+            file_name = "image_%05d.npy" % (start_num + i)
+            dat[i, :] = torch.from_numpy(np.load(os.path.join(video_root, file_name)))
 
-            else:
-                # dat = np.hstack((dat, np.load(os.path.join(video_root, file_name))))
-                dat = np.row_stack((dat, np.load(os.path.join(video_root, file_name))))
-            """
+        dat = torch.transpose(dat,0,1)
         label = cur_video_info[1]
         return dat, label, video_root
 
@@ -53,12 +49,13 @@ class RepresentationDataset(Dataset):
 
 class RepresentationLoader:
 
-    def __init__(self, batch_size, num_workers, path, txt_path, split_num):
+    def __init__(self, batch_size, num_workers, path, txt_path, split_num, stack_size):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.data_path = path
         self.text_path = txt_path
         self.split_num = split_num
+        self.stack_size = stack_size
         self.train_video = self.load_train_test_list()
 
     @staticmethod
@@ -82,8 +79,7 @@ class RepresentationLoader:
         return train_video# , test_video
 
     def run(self):
-        training_set = RepresentationDataset(self.train_video,
-                                             self.data_path)
+        training_set = RepresentationDataset(self.train_video, self.data_path, self.stack_size)
         train_loader = DataLoader(training_set, batch_size=self.batch_size, shuffle=True)
         return train_loader
 

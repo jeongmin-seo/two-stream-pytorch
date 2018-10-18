@@ -25,7 +25,7 @@ class DynamicKMaxPooling(nn.Module):
         # (for conv layers, the length dimension is last)
         s = X.size()[2]
         k_ll = ((self.L - l) / self.L) * s
-        k_l = round(max(self.k_top, np.ceil(k_ll)))
+        k_l = int(round(max(self.k_top, np.ceil(k_ll))))
         out = F.adaptive_max_pool1d(X, k_l)
 
 
