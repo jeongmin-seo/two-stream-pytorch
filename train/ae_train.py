@@ -1,7 +1,8 @@
 ###################################
 # requirment library              #
 ###################################
-import data_loader.spatial_dataloader as data_loader
+# import data_loader.spatial_dataloader as data_loader
+import data_loader.extract_representation_loader as data_loader
 from torch.autograd import Variable
 import visdom
 import numpy as np
@@ -17,12 +18,12 @@ from util.custom_error import WrongSelectError
 # select mode                     #
 ###################################
 parser = argparse.ArgumentParser(description='PyTorch Two-Stream Action Recognition')
-parser.add_argument('--data_root', metavar='DIR', default='/home/jeongmin/workspace/data/HMDB51/frames',
+parser.add_argument('--data_root', metavar='DIR', default='/home/jm/Two-stream_data/HMDB51/original/frames',
                     help='path to datset root')
 parser.add_argument('--text_root', '-t', default='/home/jeongmin/workspace/data/HMDB51',
                     help='path to train test split text files root')
 parser.add_argument('--split_number', default=1, help='select split number', choices=[1, 2, 3])
-parser.add_argument('--save_path', '-s', default='/home/jeongmin/workspace/model/two-stream-pytorch/frame_ae')
+parser.add_argument('--save_path', '-s', default='/home/jm/hdd/frame_ae_model')
 parser.add_argument('--mode', '-m', default='test', choices=["train", "test"])
 parser.add_argument('--batch_size', '-b', default=1)
 parser.add_argument('--epoch', '-e', default=10000)
@@ -103,13 +104,12 @@ def train():
 
 
 def test():
-    result_path = "/home/jeongmin/workspace/data/HMDB51/representation"
-    loader = data_loader.RepresentationLoader(BATCH_SIZE=args.batch_size, num_workers=8,
-                                              path=args.data_root, txt_path=args.text_root, split_num=args.split_number)
+    result_path = "/home/jm/hdd/representation"
+    loader = data_loader.RepresentationLoader(batch_size=args.batch_size, num_workers=8, path=args.data_root)
     represetation_loader = loader.run()
 
     # model load
-    model = torch.load("/home/jeongmin/workspace/model/two-stream-pytorch/frame_ae/best_ae_779epoch.pkl")
+    model = torch.load("/home/jm/hdd/frame_ae_model/best_ae_779epoch.pkl")
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # init encoder
@@ -148,14 +148,15 @@ if __name__ == "__main__":
 
     global args
     args = parser.parse_args()
-
+    """
     if args.mode == "train":
         train()
     elif args.mode == "test":
         test()
     else:
         raise WrongSelectError("No Named " + args.mode + "in args")
-
+    """
+    test()
 
 #  A  A
 # (‘ㅅ‘=)

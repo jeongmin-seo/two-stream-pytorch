@@ -28,5 +28,4 @@ class DynamicKMaxPooling(nn.Module):
         k_l = int(round(max(self.k_top, np.ceil(k_ll))))
         out = F.adaptive_max_pool1d(X, k_l)
 
-
         return out

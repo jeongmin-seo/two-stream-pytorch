@@ -178,7 +178,7 @@ class CubeDataLoader:
                                               root_dir=self.data_path,
                                               mode='train',
                                               transform=transforms.Compose([
-                                                  transforms.Resize([118, 118]),
+                                                  transforms.Resize([112, 112]),
                                                   # transforms.Scale([118,118]),
                                                   # transforms.Scale([108,108]),
                                                   transforms.RandomCrop([108, 108]),
