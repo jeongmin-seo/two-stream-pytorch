@@ -9,7 +9,7 @@ import visdom
 import pickle
 from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 
-batch_size =32
+batch_size = 2
 nb_epoch = 10000
 data_root = "/home/jm/hdd/representation/split1"
 text_root = "/home/jm/Two-stream_data/HMDB51"
@@ -54,6 +54,47 @@ class Conv(nn.Module):
         out = self.fc(out)
 
         return out
+
+class ConvTemporal(nn.Module):
+    def __init__(self, batch_size):
+        super(ConvTemporal, self).__init__()
+        self.batch_size = batch_size
+        self.dynamic_k_maxpool1 = DynamicKMaxPooling(10, 4)
+
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(2000, 1400, 3),
+            nn.ReLU(),
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(1400, 900, 3),
+            nn.ReLU()
+        )
+        self.conv3 = nn.Sequential(
+            nn.Conv1d(900, 400, 3),
+            nn.ReLU()
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv1d(400, 200, 3),
+            nn.ReLU()
+        )
+        self.fc = nn.Linear(2000, 51)
+
+
+    def forward(self, _input):
+        out = self.conv1(_input)
+        out = self.dynamic_k_maxpool1(out, 1)
+        out = self.conv2(out)
+        out = self.dynamic_k_maxpool1(out, 2)
+        out = self.conv3(out)
+        out = self.dynamic_k_maxpool1(out, 3)
+        out = self.conv4(out)
+        out = self.dynamic_k_maxpool1(out, 4)
+        out = out.view(out.size()[0], -1)
+
+        out = self.fc(out)
+
+        return out
+
 
 def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
     print('==> Epoch:[{0}/{1}][training stage]'.format(_epoch, _nb_epochs))
@@ -110,6 +151,29 @@ def validation_1epoch(_model, _val_loader, _optimizer, _criterion, _epoch, _nb_e
 
     return video_acc, video_loss, dic_video_level_preds
 
+def all_frmae_validation_epoch(_model, _val_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
+    print('==> Epoch:[{0}/{1}][validation stage]'.format(_epoch, _nb_epochs))
+
+    accuracy_list = []
+    loss_list = []
+    _model.eval()
+
+    with torch.no_grad():
+
+        for i, (dat, label) in enumerate(_val_loader):
+            label = label.cuda()
+            input_var = Variable(dat).cuda()
+            target_var = Variable(label).cuda()
+
+            # compute output
+            output = _model(input_var)
+
+            loss = _loss_func(output, target_var)
+            loss_list.append(loss)
+            accuracy_list.append(accuracy(output.data, label))
+
+    return float(sum(accuracy_list) / len(accuracy_list)), float(sum(loss_list) / len(loss_list)), _model
+
 if __name__=="__main__":
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -119,10 +183,10 @@ if __name__=="__main__":
     val_loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
     val_acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
-    loader = data_loader.RepresentationLoader(batch_size, 8, data_root, text_root, 1, 19)
+    loader = data_loader.RepresentationLoader(batch_size, 8, data_root, text_root, 1, 1200)
     train_loader, val_loader = loader.run()
 
-    model = Conv(batch_size)
+    model = ConvTemporal(batch_size)
     criterion = nn.CrossEntropyLoss().cuda()
     optimizer = torch.optim.Adam(model.parameters(), betas=(0.5, 0.999), lr=2e-4)
 
@@ -131,7 +195,7 @@ if __name__=="__main__":
     for epoch in range(1, nb_epoch +1):
         train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
         print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
-        val_acc, val_loss, video_level_pred = validation_1epoch(model, val_loader, optimizer, criterion, epoch, nb_epoch)
+        val_acc, val_loss, video_level_pred = all_frmae_validation_epoch(model, val_loader, optimizer, criterion, epoch, nb_epoch)
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
 
         is_best = val_acc > cur_best_acc
