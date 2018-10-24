@@ -9,7 +9,7 @@ import visdom
 import pickle
 from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 
-batch_size = 2
+batch_size = 32
 nb_epoch = 10000
 data_root = "/home/jm/hdd/representation/split1"
 text_root = "/home/jm/Two-stream_data/HMDB51"
@@ -59,25 +59,33 @@ class ConvTemporal(nn.Module):
     def __init__(self, batch_size):
         super(ConvTemporal, self).__init__()
         self.batch_size = batch_size
-        self.dynamic_k_maxpool1 = DynamicKMaxPooling(10, 4)
+        self.dynamic_k_maxpool1 = DynamicKMaxPooling(16, 5)
 
         self.conv1 = nn.Sequential(
-            nn.Conv1d(2000, 1400, 3),
+            nn.Conv1d(2000, 1700, 3),
             nn.ReLU(),
         )
         self.conv2 = nn.Sequential(
-            nn.Conv1d(1400, 900, 3),
+            nn.Conv1d(1700, 1400, 3),
             nn.ReLU()
         )
         self.conv3 = nn.Sequential(
-            nn.Conv1d(900, 400, 3),
+            nn.Conv1d(1400, 1000, 3),
             nn.ReLU()
         )
         self.conv4 = nn.Sequential(
-            nn.Conv1d(400, 200, 3),
+            nn.Conv1d(1000, 700, 3),
             nn.ReLU()
         )
-        self.fc = nn.Linear(2000, 51)
+        self.conv5 = nn.Sequential(
+            nn.Conv1d(700, 400, 3),
+            nn.ReLU()
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(6400, 4000),
+            nn.Linear(4000, 2000),
+            nn.Linear(2000, 51)
+        )
 
 
     def forward(self, _input):
@@ -89,6 +97,8 @@ class ConvTemporal(nn.Module):
         out = self.dynamic_k_maxpool1(out, 3)
         out = self.conv4(out)
         out = self.dynamic_k_maxpool1(out, 4)
+        out = self.conv5(out)
+        out = self.dynamic_k_maxpool1(out, 5)
         out = out.view(out.size()[0], -1)
 
         out = self.fc(out)
@@ -110,7 +120,7 @@ def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epoc
         output = _model(input_var)
 
         loss = _loss_func(output, target_var)
-        loss_list.append(loss)
+        loss_list.append(loss.data)
         accuracy_list.append(accuracy(output.data, label))
 
         # compute gradient and do SGD step
@@ -169,7 +179,7 @@ def all_frmae_validation_epoch(_model, _val_loader, _optimizer, _loss_func, _epo
             output = _model(input_var)
 
             loss = _loss_func(output, target_var)
-            loss_list.append(loss)
+            loss_list.append(loss.data)
             accuracy_list.append(accuracy(output.data, label))
 
     return float(sum(accuracy_list) / len(accuracy_list)), float(sum(loss_list) / len(loss_list)), _model

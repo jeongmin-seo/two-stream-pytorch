@@ -13,6 +13,7 @@ import re
 from network.autoencoder_2d import Encoder, Decoder, UnNormalize
 import argparse
 from util.custom_error import WrongSelectError
+import torchvision.models as models
 
 ###################################
 # select mode                     #
@@ -104,10 +105,15 @@ def train():
 
 
 def test():
-    result_path = "/home/jm/hdd/representation"
+    result_path = "/home/jm/hdd/resnet_feature"
     loader = data_loader.RepresentationLoader(batch_size=args.batch_size, num_workers=8, path=args.data_root)
     represetation_loader = loader.run()
 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    encoder = models.resnet101(pretrained=True)
+    encoder.to(device)
+    encoder.eval()
+    """
     # model load
     model = torch.load("/home/jm/hdd/frame_ae_model/best_ae_779epoch.pkl")
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -122,12 +128,13 @@ def test():
     nomalize = nn.Sequential(
         nn.Sigmoid()
     )
-
+    """
     for i, (data, data_path) in enumerate(represetation_loader):
         input_var = Variable(data, volatile=True).cuda(async=True)
         latent = encoder(input_var)
-        norm_output = nomalize(latent)
+        # norm_output = nomalize(latent)
 
+        print(latent.size())
         dir_name = re.split("[/]+", data_path[0])
         save_path = os.path.join(result_path, dir_name[-3])
 
@@ -141,7 +148,7 @@ def test():
         save_name = os.path.join(save_path, dir_name[-1])
         save_name = save_name.replace('.jpg', '.npy')
 
-        np.save(save_name, norm_output.data.cpu().numpy())
+        np.save(save_name, latent.data.cpu().numpy())
 
 
 if __name__ == "__main__":

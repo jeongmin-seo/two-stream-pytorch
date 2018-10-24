@@ -248,6 +248,9 @@ def main():
 
     model = model.to(device)
     cur_best_acc = 0
+
+    model = torch.nn.DataParallel(model, device_ids=[0,1])
+
     for epoch in range(nb_epoch+1):
         # train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
         train_acc, train_loss, model = train_tsn_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
