@@ -8,12 +8,12 @@ import torchvision.transforms as transforms
 
 class DCNNDataset(Dataset):
 
-    def __init__(self, dic, root_dir, transform=None):
+    def __init__(self, dic, root_dir, max_frame_num, transform=None):
         self.keys = list(dic.keys())
         self.dic = dic
         self.root_dir = root_dir
         self.transform = transform
-        self.max_frame_num = 1081 # 수정하기
+        self.max_frame_num = max_frame_num
         self.img_size = 224
 
     def __len__(self):
@@ -38,17 +38,18 @@ class DCNNDataset(Dataset):
             j = j + 1
             img.close()
 
-        return X, label, cur_video_key
+        return cube, label, cur_video_key
 
 
 class DCNNLoader:
 
-    def __init__(self, batch_size, num_workers, path, txt_path, split_num):
+    def __init__(self, batch_size, num_workers, path, txt_path, split_num, max_frame_num):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.data_path = path
         self.text_path = txt_path
         self.split_num = split_num
+        self.max_frame_num = max_frame_num
 
         # split the training and testing videos
         self.train_video, self.test_video = self.load_train_test_list()
@@ -78,6 +79,7 @@ class DCNNLoader:
     def run(self):
         training_set = DCNNDataset(self.train_video,
                                    self.data_path,
+                                   self.max_frame_num,
                                    transform=transforms.Compose([
                                        transforms.Scale([224, 224]),
                                        transforms.ToTensor(),
@@ -88,6 +90,7 @@ class DCNNLoader:
 
         validation_set = DCNNDataset(self.test_video,
                                      self.data_path,
+                                     self.max_frame_num,
                                      transform=transforms.Compose([
                                          transforms.Scale([224,224]),
                                          transforms.ToTensor(),

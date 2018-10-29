@@ -13,13 +13,14 @@ from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 
 
 # experimental parameters
-data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
+data_root = "/home/jm/Two-stream_data/HMDB51/original/flow"
 txt_root = "/home/jm/Two-stream_data/HMDB51"
 save_path = "/home/jm/hdd/spatial_cube_model"
 batch_size = 4
 nb_epoch = 10000
 L = 16# 32
 n_class = 51
+mode = 'temporal'
 
 # C3D Model
 class C3D(nn.Module):
@@ -202,17 +203,26 @@ def main():
 
     if not os.path.isdir(save_path):
         os.makedirs(save_path)
-
+    """
     loader = data_loader.CubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
                                         path=data_root, txt_path=txt_root, split_num=1,mode='spatial')
-
+    """
+    loader = data_loader.CubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
+                                        path=data_root, txt_path=txt_root, split_num=1, mode=mode)
     train_loader, test_loader, test_video = loader.run()
 
     # model = resnet_3d.resnet18(sample_size=112, sample_duration=L)
     # model = resnet_3d.resnet34(sample_size=112, sample_duration=32)
     state_dict = torch.load(os.path.join(save_path, "resnet-101-kinetics-hmdb51_split1.pth"))
 
-    model = resnet_3d.resnet101(sample_size=108, sample_duration=L, num_classes=n_class)
+    model = resnet_3d.resnet101(sample_size=224, sample_duration=L, num_classes=n_class)
+    model.conv1 = nn.Conv3d(
+            2,
+            64,
+            kernel_size=7,
+            stride=(1, 2, 2),
+            padding=(3, 3, 3),
+            bias=False)
 
     """
     model = resnet_3d.resnet152(sample_size=108, sample_duration=L, num_classes=51)
@@ -220,14 +230,18 @@ def main():
     model.fc.out_features = n_class
     """
 
+    """
+    # this code is pretrained model load code
     new_state_dict = copy.deepcopy(state_dict)
     for key in state_dict['state_dict'].keys():
         new_key = key.split('.', 1)[1]
         new_state_dict['state_dict'][new_key] = state_dict['state_dict'][key]
         del new_state_dict['state_dict'][key]
     del state_dict
-
+    
     model.load_state_dict(new_state_dict['state_dict'])
+    """
+
     """
     # parameters = resnet_3d.get_fine_tuning_parameters(model, 2)
 
@@ -238,11 +252,10 @@ def main():
         nn.Softmax()
     )
     """
-    parameters = resnet_3d.get_fine_tuning_parameters(model, 3)
 
 
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = torch.optim.Adam(parameters, betas=(0.5,0.999), lr=2e-4)
+    optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=1e-3)
     # optimizer = torch.optim.SGD(parameters, lr=0.001)
     # scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 

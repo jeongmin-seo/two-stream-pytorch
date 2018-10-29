@@ -91,8 +91,8 @@ class SpatialCubeDataset(Dataset):
 class TemporalCubeDataset(SpatialCubeDataset):
     def __init__(self, dic, in_channel, root_dir, mode, transform=None):
         super().__init__(dic, in_channel, root_dir, mode, transform)
-        self.img_rows = 68
-        self.img_cols = 68
+        self.img_rows = 224
+        self.img_cols = 224
 
     def stack_frame(self, keys, _n_frame, _idx):
         video_path = os.path.join(self.root_dir, keys.split('-')[0])
@@ -199,7 +199,7 @@ class CubeDataLoader:
                                                mode='train',
                                                transform=transforms.Compose([
                                                    # transforms.Scale([68,68]),
-                                                   transforms.Resize(68),
+                                                   transforms.Resize(224),
                                                    transforms.ToTensor(),
                                                    transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                ]))
@@ -237,7 +237,7 @@ class CubeDataLoader:
                                                  mode='val',
                                                  transform=transforms.Compose([
                                                      #transforms.Scale([68, 68]),
-                                                     transforms.Resize(68),
+                                                     transforms.Resize(224),
                                                      transforms.ToTensor(),
                                                      transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                  ]))

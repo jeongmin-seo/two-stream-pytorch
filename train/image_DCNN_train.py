@@ -10,8 +10,9 @@ import visdom
 import pickle
 from util.util import accuracy, frame2_video_level_accuracy, save_best_model
 
-batch_size = 32
+batch_size = 4
 nb_epoch = 10000
+max_frame_num = 1063
 data_root = "/home/jm/hdd/representation/split1"
 text_root = "/home/jm/Two-stream_data/HMDB51"
 save_path = "/home/jm/hdd/dynamic_k_max_model"
@@ -75,12 +76,18 @@ def train_1epoch(_img_feature_extract_model, _dcnn_model, _train_loader, _optimi
     loss_list = []
     _img_feature_extract_model.train()
     _dcnn_model.train()
-    for i, (dat, label) in enumerate(_train_loader):
+    for i, (dat, label, video_name) in enumerate(_train_loader):
         label = label.cuda()
-        input_var = Variable(dat).cuda()
+        # input_var = Variable(dat).cuda()
         target_var = Variable(label).cuda().long()
 
-        output = _model(input_var)
+        print(dat.size())
+        for batch_idx in range(batch_size):
+            for frame_idx in range(max_frame_num):
+                output = _img_feature_extract_model(dat[batch_idx, :, frame_idx, :].unsqueeze_(0).cuda())
+                print(output.size())
+
+        # output = _model(input_var)
 
         loss = _loss_func(output, target_var)
         loss_list.append(loss.data)
@@ -94,13 +101,14 @@ def train_1epoch(_img_feature_extract_model, _dcnn_model, _train_loader, _optimi
     return float(sum(accuracy_list) / len(accuracy_list)), float(sum(loss_list) / len(loss_list)), _img_feature_extract_model, _dcnn_model
 
 
-def validation_1epoch(_img_feature_extract_model, _dcnn_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
+def validation_1epoch(_img_feature_extract_model, _dcnn_model, _val_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
     print('==> Epoch:[{0}/{1}][validation stage]'.format(_epoch, _nb_epochs))
 
     dic_video_level_preds = {}
     dic_video_level_targets = {}
-    _model.eval()
-    for i, (video, dat, label) in enumerate(_val_loader):
+    _img_feature_extract_model.eval()
+    _dcnn_model.eval()
+    for i, (dat, label, video_name) in enumerate(_val_loader):
         label = label.cuda(async=True)
         with torch.no_grad():
             input_var = Variable(dat).cuda(async=True)
@@ -120,7 +128,7 @@ def validation_1epoch(_img_feature_extract_model, _dcnn_model, _train_loader, _o
             else:
                 dic_video_level_preds[videoName] += preds[j, :]
 
-    video_acc, video_loss = frame2_video_level_accuracy(dic_video_level_preds, dic_video_level_targets, _criterion)
+    video_acc, video_loss = frame2_video_level_accuracy(dic_video_level_preds, dic_video_level_targets, _loss_func)
 
     return video_acc, video_loss, dic_video_level_preds
 
@@ -134,8 +142,8 @@ if __name__=="__main__":
     val_loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
     val_acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
-    loader = data_loader.DCNNLoader(batch_size=batch_size, num_workers=4,
-                                    path=data_root, txt_path=text_root, split_num=1)
+    loader = data_loader.DCNNLoader(batch_size=batch_size, num_workers=4, path=data_root,
+                                    txt_path=text_root, split_num=1, max_frame_num=max_frame_num)
     train_loader, val_loader = loader.run()
 
     feature_extract_model = models.resnet34(pretrained=True)
@@ -150,8 +158,13 @@ if __name__=="__main__":
 
     cur_best_acc = 0
     for epoch in range(1, nb_epoch +1):
-        train_acc, train_loss, model = train_1epoch(feature_extract_model, action_decision_model,
-                                                    train_loader, optimizer, criterion, epoch, nb_epoch)
+        train_acc, train_loss, feature_extract_model, action_decision_model = train_1epoch(feature_extract_model,
+                                                                                           action_decision_model,
+                                                                                           train_loader,
+                                                                                           optimizer,
+                                                                                           criterion,
+                                                                                           epoch,
+                                                                                           nb_epoch)
         print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
         val_acc, val_loss, video_level_pred = validation_1epoch(feature_extract_model, action_decision_model,
                                                                 val_loader, optimizer, criterion, epoch, nb_epoch)
@@ -172,7 +185,7 @@ if __name__=="__main__":
                  win=val_loss_plot, update="append", name='Validation Loss')
         vis.line(X=np.asarray([epoch]), Y=np.asarray([val_acc]),
                  win=val_acc_plot, update="append", name="Validation Accuracy")
-        save_best_model(is_best, model, save_path, epoch)
+        # save_best_model(is_best, model, save_path, epoch)
 
 #  A  A
 # (‘ㅅ‘=)
