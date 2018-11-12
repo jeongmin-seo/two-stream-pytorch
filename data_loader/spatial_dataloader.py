@@ -114,7 +114,7 @@ class LoaderInit:
 
     def load_train_test_list(self):
         train_file_path = os.path.join(self.text_path, "train_split%d.txt" % self.split_num)
-        test_file_path = os.path.join(self.text_path, "test_split%d.txt" % self.split_num)
+        test_file_path = os.path.join(self.text_path, "train_split%d.txt" % self.split_num)
 
         train_video = self.read_text_file(train_file_path)
         test_video = self.read_text_file(test_file_path)

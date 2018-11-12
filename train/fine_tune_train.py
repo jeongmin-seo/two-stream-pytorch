@@ -12,10 +12,10 @@ from network.network import *
 
 import data_loader.spatial_dataloader as data_loader
 
-data_root = "/home/jeongmin/workspace/data/HMDB51/frames"
-txt_root = "/home/jeongmin/workspace/data/HMDB51"
-model_path = "/home/jeongmin/workspace/github/two-stream-pytorch/ucf_model/spatial_model"
-pretrained_model_path = os.path.join(model_path, "ucf_spatial_model_best.pth.tar")
+data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
+txt_root = "/home/jm/Two-stream_data/HMDB51"
+model_path = "/home/jm/hdd/action_final_result/resnet152_spatial"
+pretrained_model_path = os.path.join(model_path, "8_epoch_best_model.pth")
 n_class = 51
 batch_size = 16
 nb_epoch = 10000
@@ -91,45 +91,65 @@ def main():
                                             path=data_root, txt_path=txt_root, split_num=1)
 
     train_loader, test_loader, test_video = loader.run()
-    model = resnet101(channel=3).cuda()
-
-
+    """
+    # model = resnet101(channel=3).cuda()
+    model = models.resnet101(pretrained=True)
     criterion = nn.CrossEntropyLoss().cuda()
     optimizer = torch.optim.SGD(model.parameters(), 0.001, momentum=0.9)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 
+ 
     tmp = torch.load(pretrained_model_path)
     model.load_state_dict(tmp['state_dict'])
-    #optimizer.load_state_dict(tmp['optimizer'])
-
+    optimizer.load_state_dict(tmp['optimizer'])
+ 
     torch.save(model, './best_spatial.pth')
     for param in model.parameters():
         param.requires_grad = False
-
+  
     # Parameters of newly constructed modules have requires_grad=True by default
     model.fc_custom.weight.requires_grad = True
     model.fc_custom.bias.requires_grad = True
     num_ftrs = model.fc_custom.in_features
-    model.fc_custom = nn.Linear(num_ftrs, n_class)
+
+    num_ftrs = model.fc.in_features
+    model.fc = nn.Linear(num_ftrs, n_class)
+    """
+    model = torch.load(pretrained_model_path)
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = torch.optim.SGD(model.parameters(), 0.0001, momentum=0.9)
+
 
     model = model.to(device)
     cur_best_acc = 0
-    for epoch in range(1, nb_epoch+1):
-        train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
-        print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
+    for epoch in range(1):
+    # for epoch in range(14, nb_epoch+1):
+        # train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
+        # print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
         val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, nb_epoch)
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
 
+        with open('/home/jm/hdd/action_final_result/resnet152_spatial/spatial_video_preds_train.pickle', 'wb') as f:
+            pickle.dump(video_level_pred, f)
+        f.close()
+
         # lr scheduler
-        scheduler.step(val_loss)
+        # scheduler.step(val_loss)
 
         is_best = val_acc > cur_best_acc
+        """
         if is_best:
             cur_best_acc = val_acc
-            with open('./ucf_model/spatial_pred/spatial_video_preds.pickle','wb') as f:
+            with open('/home/jm/hdd/action_final_result/resnet101_spatial/spatial_video_preds.pickle','wb') as f:
                 pickle.dump(video_level_pred, f)
             f.close()
-
+        """
+        """
+        if is_best:
+            cur_best_acc = val_acc
+            with open('/home/jm/hdd/resnet101_spatial/spatial_video_preds.pickle', 'wb') as f:
+                pickle.dump(video_level_pred, f)
+            f.close()
         vis.line(X=np.asarray([epoch]), Y=np.asarray([train_loss]),
                  win=loss_plot, update="append", name='Train Loss')
         vis.line(X=np.asarray([epoch]), Y=np.asarray([train_acc]),
@@ -139,7 +159,7 @@ def main():
         vis.line(X=np.asarray([epoch]), Y=np.asarray([val_acc]),
                  win=acc_plot, update="append", name="Validation Accuracy")
         save_best_model(is_best, model, model_path, epoch)
-
+        """
 
 if __name__ == '__main__':
     main()

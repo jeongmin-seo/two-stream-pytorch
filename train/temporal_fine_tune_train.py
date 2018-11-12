@@ -12,10 +12,10 @@ from network.network import *
 
 import data_loader.temporal_dataloader as data_loader
 
-data_root = "/home/jeongmin/workspace/data/HMDB51/flow"
-txt_root = "/home/jeongmin/workspace/data/HMDB51"
-model_path = "/home/jeongmin/workspace/github/two-stream-pytorch/ucf_model/temporal_model"
-pretrained_model_path = os.path.join(model_path, "ucf_temporal_model_best.pth.tar")
+data_root = "/home/jm/Two-stream_data/HMDB51/original/flow"
+txt_root = "/home/jm/Two-stream_data/HMDB51"
+model_path = "/home/jm/hdd/action_final_result/resnet34_temporal"
+pretrained_model_path = os.path.join(model_path, "85_epoch_best_model.pth")
 n_class = 51
 batch_size = 16
 nb_epoch = 10000
@@ -88,10 +88,11 @@ def main():
     loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
     acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
-    loader = data_loader.Motion_DataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
-                                           path=data_root, txt_path=txt_root, split_num=1)
+    loader = data_loader.MotionDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
+                                          path=data_root, txt_path=txt_root, split_num=1)
 
     train_loader, test_loader, test_video = loader.run()
+
     model = resnet101(channel=20).cuda()
 
     criterion = nn.CrossEntropyLoss().cuda()
@@ -112,6 +113,7 @@ def main():
     num_ftrs = model.fc_custom.in_features
     model.fc_custom = nn.Linear(num_ftrs, n_class)
 
+
     model = model.to(device)
     cur_best_acc = 0
     for epoch in range(1, nb_epoch+1):
@@ -120,8 +122,9 @@ def main():
         val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, nb_epoch)
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
 
+
         # lr scheduler
-        scheduler.step(val_loss)
+        # scheduler.step(val_loss)
 
         is_best = val_acc > cur_best_acc
         if is_best:

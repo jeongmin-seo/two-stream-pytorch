@@ -3,11 +3,10 @@ import os
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
-
 import torch
 
 
-class motion_dataset(Dataset):
+class OneCubeDataset(Dataset):
     def __init__(self, dic, in_channel, root_dir, mode, transform=None):
         # Generate a 16 Frame clip
         self.keys = list(dic.keys())
@@ -17,33 +16,37 @@ class motion_dataset(Dataset):
         self.transform = transform
         self.mode = mode
         self.in_channel = in_channel
-        self.img_rows = 224
-        self.img_cols = 224
+        self.img_rows = 112
+        self.img_cols = 112
+        self.n_label = 51
 
-    def stackopf(self, keys):
+    def reset_idx(self, _idx, _n_frame):
+        if _idx > _n_frame:
+            return self.reset_idx(_idx - _n_frame, _n_frame)
+        else:
+            return _idx
+
+    def stack_frame(self, keys, _n_frame, _step):
         video_path = os.path.join(self.root_dir, keys.split('-')[0])
 
-        flow = torch.FloatTensor(2 * self.in_channel, self.img_rows, self.img_cols)
-        i = int(self.clips_idx)
+        cube = torch.FloatTensor(3, self.in_channel,self.img_rows, self.img_cols)
 
         for j in range(self.in_channel):
-            idx = i + j
-            frame_idx = "%05d.jpg" % idx
-            # frame_idx = 'frame' + idx.zfill(6)
-            x_image = os.path.join(video_path, 'flow_x_' + frame_idx)
-            y_image = os.path.join(video_path, 'flow_y_' + frame_idx)
+            idx = self.reset_idx(j * _step + 1, _n_frame)
+            frame_idx = "image_%05d.jpg" % idx
+            image = os.path.join(video_path, frame_idx)
+            img = (Image.open(image))
 
-            imgX = (Image.open(x_image))
-            imgY = (Image.open(y_image))
+            X = self.transform(img)
+            cube[:, j, :, :] = X
+            img.close()
+        return cube
 
-            X = self.transform(imgX)
-            Y = self.transform(imgY)
-
-            flow[2 * (j - 1), :, :] = X
-            flow[2 * (j - 1) + 1, :, :] = Y
-            imgX.close()
-            imgY.close()
-        return flow
+    def get_step_size(self, _nb_frame):
+        if _nb_frame <= self.in_channel:
+            return 1
+        else:
+            return int(_nb_frame/self.in_channel)
 
     def __len__(self):
         return len(self.keys)
@@ -51,32 +54,18 @@ class motion_dataset(Dataset):
     def __getitem__(self, idx):
         # print ('mode:',self.mode,'calling Dataset:__getitem__ @ idx=%d'%idx)
         cur_key = self.keys[idx]
-        if self.mode == 'train':
-            # nb_frame = self.values[cur_key][0]
-            nb_frame = self.dic[cur_key][0]
-            self.clips_idx = random.randint(1, int(nb_frame-self.in_channel+1))
-            self.video = cur_key.split('/')[0]
-        elif self.mode == 'val':
-            split_key = cur_key.split('-')
-            self.video = split_key[0]
-            self.clips_idx = int(cur_key.split('-')[1])
-        else:
-            raise ValueError('There are only train and val mode')
+        nb_frame = self.dic[cur_key][0]
 
-        # label = self.values[cur_key][1]
         label = self.dic[cur_key][1]
-        data = self.stackopf(cur_key)
+        step = self.get_step_size(nb_frame)
+        data = self.stack_frame(cur_key, nb_frame, step)
 
-        if self.mode == 'train':
-            sample = (data, label)
-        elif self.mode == 'val':
-            sample = (self.video, data, label)
-        else:
-            raise ValueError('There are only train and val mode')
+        sample = (data, label)
+
         return sample
 
 
-class MotionDataLoader():
+class CubeDataLoader:
     def __init__(self, BATCH_SIZE, num_workers, in_channel, path, txt_path, split_num):
 
         self.BATCH_SIZE = BATCH_SIZE
@@ -85,6 +74,7 @@ class MotionDataLoader():
         self.data_path = path
         self.text_path = txt_path
         self.split_num = split_num
+
         # split the training and testing videos
         self.train_video, self.test_video = self.load_train_test_list()
 
@@ -95,7 +85,7 @@ class MotionDataLoader():
         for line in f.readlines():
             line = line.replace('\n', '')
             split_line = line.split(" ")
-            tmp[split_line[0]] = [int(split_line[1]) - 1, int(split_line[2])]  # split[0] is video name and split[1] and [2] are frame num and class label
+            tmp[split_line[0]] = [int(split_line[1]), int(split_line[2])]  # split[0] is video name and split[1] and [2] are frame num and class label
 
         return tmp
 
@@ -109,32 +99,25 @@ class MotionDataLoader():
         return train_video, test_video
 
     def run(self):
-        self.val_sample19()
         train_loader = self.train()
         val_loader = self.val()
 
         return train_loader, val_loader, self.test_video
 
-    def val_sample19(self):
-        self.dic_test_idx = {}
-        for video in self.test_video:
-            # n, g = video.split('_', 1)
 
-            sampling_interval = int((self.test_video[video][0] - 10 + 1) / 19)
-            for index in range(19):
-                clip_idx = index * sampling_interval
-                key = video + '-' + str(clip_idx + 1)
-                self.dic_test_idx[key] = self.test_video[video]
 
     def train(self):
-        training_set = motion_dataset(dic=self.train_video, in_channel=self.in_channel, root_dir=self.data_path,
+
+        training_set = OneCubeDataset(dic=self.train_video,
+                                      in_channel=self.in_channel,
+                                      root_dir=self.data_path,
                                       mode='train',
                                       transform=transforms.Compose([
-                                          transforms.Scale([224, 224]),
-                                          # transforms.RandomCrop(224),
-                                          transforms.ToTensor()
+                                          transforms.Resize([224, 224]),
+                                          transforms.ToTensor(),
+                                          transforms.Normalize(mean=[0.5,], std=[0.5,])
                                       ]))
-        print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
+        print('==> Training data :', len(training_set), ' videos', training_set[1][0][0].size())
 
         train_loader = DataLoader(
             dataset=training_set,
@@ -147,14 +130,20 @@ class MotionDataLoader():
         return train_loader
 
     def val(self):
-        validation_set = motion_dataset(dic=self.dic_test_idx, in_channel=self.in_channel, root_dir=self.data_path,
+
+        validation_set = OneCubeDataset(dic=self.test_video,
+                                        in_channel=self.in_channel,
+                                        root_dir=self.data_path,
                                         mode='val',
                                         transform=transforms.Compose([
-                                            transforms.Scale([224, 224]),
-                                            transforms.ToTensor()
+                                            transforms.Resize([224,224]),
+                                            transforms.ToTensor(),
+                                            transforms.Normalize(mean=[0.5,], std=[0.5,])
                                         ]))
         print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
         # print validation_set[1]
+
+
 
         val_loader = DataLoader(
             dataset=validation_set,
@@ -163,6 +152,7 @@ class MotionDataLoader():
             num_workers=self.num_workers)
 
         return val_loader
+
 
 #  A  A
 # (‘ㅅ‘=)
