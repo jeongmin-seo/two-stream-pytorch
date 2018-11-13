@@ -1,6 +1,7 @@
 import random
 import os
 import re
+import math
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
@@ -143,7 +144,8 @@ class SpatialDataLoader(LoaderInit):
     def val_sample19(self):
 
         for video in self.test_video:
-            sampling_interval = int((self.test_video[video][0] - 10 + 1) / 19)
+            # sampling_interval = int((self.test_video[video][0] - 10 + 1) / 19)
+            sampling_interval = math.ceil((self.test_video[video][0] - 10 + 1) / 19)
             for index in range(19):
                 clip_idx = index * sampling_interval
                 key = video + '-' + str(clip_idx + 1)

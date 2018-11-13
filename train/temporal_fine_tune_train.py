@@ -100,7 +100,7 @@ def main():
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 
     tmp = torch.load(pretrained_model_path)
-    model.load_state_dict(tmp['state_dict'])
+    model.load_state_dict(tmp['st   ate_dict'])
     optimizer.load_state_dict(tmp['optimizer'])
 
     # torch.save(model, './best_spatial.pth')
