@@ -7,7 +7,7 @@ import torch
 
 
 class SpatialCubeDataset(Dataset):
-    def __init__(self, dic, in_channel, root_dir, mode, model_mode, transform=None):
+    def __init__(self, dic, img_size, in_channel, root_dir, mode, train_type, transform=None):
         # Generate a 16 Frame clip
         self.keys = list(dic.keys())
         self.values = list(dic.values())
@@ -15,11 +15,10 @@ class SpatialCubeDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.mode = mode
-        self.model_mode = model_mode
+        self.train_type = train_type
+        self.img_size = img_size
         self.in_channel = in_channel
-        self.img_rows = 108# 224# 112
-        self.img_cols = 108# 224# 112
-        self.n_label = 51
+        # self.n_label = 51
 
     def reset_idx(self, _idx, _n_frame):
         if _idx > _n_frame:
@@ -30,12 +29,11 @@ class SpatialCubeDataset(Dataset):
     def stack_frame(self, keys, _n_frame, _idx):
         video_path = os.path.join(self.root_dir, keys.split('-')[0])
 
-        cube = torch.FloatTensor(3, self.in_channel,self.img_rows, self.img_cols)
+        cube = torch.FloatTensor(3, self.in_channel,self.img_size, self.img_size)
         i = int(_idx)
 
         for j in range(self.in_channel):
             idx = self.reset_idx(i + j, _n_frame)
-            # idx = i + j
             frame_idx = "image_%05d.jpg" % idx
             image = os.path.join(video_path, frame_idx)
             img = (Image.open(image))
@@ -54,7 +52,7 @@ class SpatialCubeDataset(Dataset):
         nb_frame = self.dic[cur_key][0]
         if self.mode == 'train':
             # self.clips_idx = random.randint(1, int(nb_frame - self.in_channel))
-            if self.model_mode == 'tsn':
+            if self.train_type == 'tsn':
                 self.clips_idx = [random.randint(1, int(nb_frame / 3)),
                                   random.randint(int(nb_frame / 3), int(2 * nb_frame / 3)),
                                   random.randint(int(2 * nb_frame / 3), int(nb_frame))]  # TSN
@@ -71,7 +69,7 @@ class SpatialCubeDataset(Dataset):
 
         label = self.dic[cur_key][1]
 
-        if self.model_mode == 'tsn' and self.mode == 'train':
+        if self.train_type == 'tsn' and self.mode == 'train':
             data = []
             for idx in self.clips_idx:
                 data.append(self.stack_frame(cur_key, nb_frame, idx))
@@ -123,15 +121,17 @@ class TemporalCubeDataset(SpatialCubeDataset):
 
 
 class CubeDataLoader:
-    def __init__(self, BATCH_SIZE, num_workers, in_channel, path, txt_path, split_num, mode):
+    def __init__(self, img_size, batch_size, num_workers, in_channel, path, txt_path, split_num, modality, train_type):
 
-        self.BATCH_SIZE = BATCH_SIZE
+        self.img_size = img_size
+        self.BATCH_SIZE = batch_size
         self.num_workers = num_workers
         self.in_channel = in_channel
         self.data_path = path
         self.text_path = txt_path
         self.split_num = split_num
-        self.mode = mode
+        self.train_type = train_type
+        self.modality = modality
         # split the training and testing videos
         self.train_video, self.test_video = self.load_train_test_list()
 
@@ -165,41 +165,37 @@ class CubeDataLoader:
     def val_sample19(self):
         self.dic_test_idx = {}
         for video in self.test_video:
-            sampling_interval = int((self.test_video[video][0] - self.in_channel + 1) / 19)
+            # sampling_interval = int((self.test_video[video][0] - self.in_channel + 1) / 19)
+            sampling_interval = int((self.test_video[video][0] + 1) / 19)
             for index in range(19):
                 clip_idx = index * sampling_interval
                 key = video + '-' + str(clip_idx + 1)
                 self.dic_test_idx[key] = self.test_video[video]
 
     def train(self):
-        if self.mode == "spatial":
+        if self.modality == "rgb":
             training_set = SpatialCubeDataset(dic=self.train_video,
+                                              img_size=self.img_size,
                                               in_channel=self.in_channel,
                                               root_dir=self.data_path,
                                               mode='train',
                                               transform=transforms.Compose([
-                                                  transforms.Resize([112, 112]),
-                                                  # transforms.Scale([118,118]),
-                                                  # transforms.Scale([108,108]),
-                                                  transforms.RandomCrop([108, 108]),
-                                                  #transforms.RandomCrop(224),
-                                                  # transforms.RandomHorizontalFlip(),
-                                                  # transforms.Grayscale(),
+                                                  transforms.Resize([self.img_size+5, self.img_size+5]),
+                                                  transforms.RandomCrop([self.img_size, self.img_size]),
                                                   transforms.ToTensor(),
                                                   # transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                   #                      std=[0.229, 0.224, 0.225])
-
-                                              ]), model_mode='tsn')
+                                              ]), train_type=self.train_type)
             print('==> Training data :', len(training_set), ' videos', training_set[1][0][0].size())
 
-        elif self.mode == "temporal":
+        elif self.modality == "flow":
             training_set = TemporalCubeDataset(dic=self.train_video,
                                                in_channel=self.in_channel,
                                                root_dir=self.data_path,
                                                mode='train',
                                                transform=transforms.Compose([
                                                    # transforms.Scale([68,68]),
-                                                   transforms.Resize(224),
+                                                   transforms.Resize(self.img_size),
                                                    transforms.ToTensor(),
                                                    transforms.Normalize(mean=(0.5,), std=(0.5,))
                                                ]))
@@ -216,21 +212,22 @@ class CubeDataLoader:
         return train_loader
 
     def val(self):
-        if self.mode == "spatial":
+        if self.modality == "rgb":
             validation_set = SpatialCubeDataset(dic=self.dic_test_idx,
+                                                img_size=self.img_size,
                                                 in_channel=self.in_channel,
                                                 root_dir=self.data_path,
                                                 mode='val',
                                                 transform=transforms.Compose([
-                                                    # transforms.Scale([108,108]),
-                                                    transforms.Resize([108,108]),
+                                                    transforms.Resize([self.img_size,self.img_size]),
                                                     transforms.ToTensor(),
-                                                    # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                                                ]), model_mode='tsn')
+                                                    # transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                    #                      std=[0.229, 0.224, 0.225])
+                                                ]), train_type=self.train_type)
             print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
             # print validation_set[1]
 
-        elif self.mode == "temporal":
+        elif self.modality == "flow":
             validation_set = TemporalCubeDataset(dic=self.dic_test_idx,
                                                  in_channel=self.in_channel,
                                                  root_dir=self.data_path,

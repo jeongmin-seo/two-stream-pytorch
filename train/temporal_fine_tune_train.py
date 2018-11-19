@@ -88,7 +88,7 @@ def main():
     loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
     acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
-    loader = data_loader.MotionDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
+    loader = data_loader.MotionDataLoader(batch_size=batch_size, num_workers=8, in_channel=L,
                                           path=data_root, txt_path=txt_root, split_num=1)
 
     train_loader, test_loader, test_video = loader.run()
@@ -100,7 +100,7 @@ def main():
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
 
     tmp = torch.load(pretrained_model_path)
-    model.load_state_dict(tmp['st   ate_dict'])
+    model.load_state_dict(tmp['state_dict'])
     optimizer.load_state_dict(tmp['optimizer'])
 
     # torch.save(model, './best_spatial.pth')

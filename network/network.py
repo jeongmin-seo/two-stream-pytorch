@@ -1,11 +1,4 @@
 import torch
-import torch.nn.functional as F
-
-import math
-import numpy as np
-import torch
-from torch.autograd import Variable
-
 import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
@@ -214,12 +207,12 @@ class ResNet(nn.Module):
         return out
 
 
-def resnet18(pretrained=False, channel= 20, **kwargs):
+def resnet18(pretrained=False, channel=20, nb_classes=101, **kwargs):
     """Constructs a ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(BasicBlock, [2, 2, 2, 2], nb_classes=101, channel=channel, **kwargs)
+    model = ResNet(BasicBlock, [2, 2, 2, 2], nb_classes=nb_classes, channel=channel, **kwargs)
     if pretrained:
        pretrain_dict = model_zoo.load_url(model_urls['resnet18'])                  # modify pretrain code
        model_dict = model.state_dict()
@@ -228,9 +221,9 @@ def resnet18(pretrained=False, channel= 20, **kwargs):
     return model
 
 
-def resnet34(pretrained=False, channel= 20, **kwargs):
+def resnet34(pretrained=False, channel= 20, nb_classes=101, **kwargs):
 
-    model = ResNet(BasicBlock, [3, 4, 6, 3], nb_classes=101, channel=channel, **kwargs)
+    model = ResNet(BasicBlock, [3, 4, 6, 3], nb_classes=nb_classes, channel=channel, **kwargs)
     if pretrained:
        pretrain_dict = model_zoo.load_url(model_urls['resnet34'])                  # modify pretrain code
        model_dict = model.state_dict()
@@ -239,9 +232,9 @@ def resnet34(pretrained=False, channel= 20, **kwargs):
     return model
 
 
-def resnet50(pretrained=False, channel= 20, **kwargs):
+def resnet50(pretrained=False, channel= 20, nb_classes=101, **kwargs):
 
-    model = ResNet(Bottleneck, [3, 4, 6, 3], nb_classes=101, channel=channel, **kwargs)
+    model = ResNet(Bottleneck, [3, 4, 6, 3], nb_classes=nb_classes, channel=channel, **kwargs)
     if pretrained:
        pretrain_dict = model_zoo.load_url(model_urls['resnet50'])                  # modify pretrain code
        model_dict = model.state_dict()
@@ -250,9 +243,9 @@ def resnet50(pretrained=False, channel= 20, **kwargs):
     return model
 
 
-def resnet101(pretrained=False, channel= 20, **kwargs):
+def resnet101(pretrained=False, channel= 20, nb_classes=101, **kwargs):
 
-    model = ResNet(Bottleneck, [3, 4, 23, 3],nb_classes=101, channel=channel, **kwargs)
+    model = ResNet(Bottleneck, [3, 4, 23, 3],nb_classes=nb_classes, channel=channel, **kwargs)
     if pretrained:
        pretrain_dict = model_zoo.load_url(model_urls['resnet101'])                  # modify pretrain code
        model_dict = model.state_dict()
@@ -262,11 +255,14 @@ def resnet101(pretrained=False, channel= 20, **kwargs):
     return model
 
 
-def resnet152(pretrained=False, **kwargs):
+def resnet152(pretrained=False, channel=20, nb_classes=101, **kwargs):
 
-    model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
+    model = ResNet(Bottleneck, [3, 8, 36, 3], nb_classes=nb_classes, channel=channel, **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet152']))
+        pretrained_dict = model_zoo.load_url(model_urls['resnet152'])
+        model_dict = model.state_dict()
+        model_dict = weight_transform(model_dict, pretrained_dict, channel)
+        model.load_state_dict(model_dict)
     return model
 
 

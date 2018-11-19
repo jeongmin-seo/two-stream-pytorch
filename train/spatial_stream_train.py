@@ -2,21 +2,50 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from network.network import Net
-from util.util import accuracy, frame2_video_level_accuracy, save_best_model
+import torchvision.models as models
 import pickle
 import visdom
-import numpy as np
 import os
+import sys
+import numpy as np
+import argparse
 
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 import data_loader.spatial_dataloader as data_loader
+from util.util import accuracy, frame2_video_level_accuracy, save_best_model, str2bool, make_save_dir
 
-data_root = "/home/jeongmin/workspace/data/HMDB51/frames"
-txt_root = "/home/jeongmin/workspace/data/HMDB51"
-model_path = "/home/jeongmin/workspace/github/two-stream-pytorch/spatial_model"
-batch_size = 128
-nb_epoch = 10000
+###################################
+#     argument parser setting     #
+###################################
+parser = argparse.ArgumentParser(description='Pytorch Action Recognition temporal stream')
+parser.add_argument('--data_root', type=str, help="set data root")
+parser.add_argument('--text_root', type=str, help="set train test split file root")
+parser.add_argument('--split_num', type=int, choices=[1,2,3], help='set train test split number')
+parser.add_argument('--save_root', type=str, default="./")
+parser.add_argument('--model', type=str,
+                    choices=['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101','resnet152'], help='set model')
+parser.add_argument('--pretrained', type=str, default='true')
+parser.add_argument('--img_size', type=int, default=224, help="set train image size")
+parser.add_argument('--learning_rate','--lr', type=float, default=0.001, help="set train learning rate")
+parser.add_argument('--batch_size', '--bs', type=int, default=16, help="set batch size")
+parser.add_argument('--epoch', type=int, default=10000, help="set train epoch number")
 
+
+def set_model(model_name, pretrained):
+    if model_name == 'resnet18':
+        select_model = models.resnet18(pretrained=pretrained)
+    elif model_name == 'resnet34':
+        select_model = models.resnet34(pretrained=pretrained)
+    elif model_name == 'resnet50':
+        select_model = models.resnet50(pretrained=pretrained)
+    elif model_name == 'resnet101':
+        select_model = models.resnet101(pretrained=pretrained)
+    elif model_name == 'resnet152':
+        select_model = models.resnet152(pretrained=pretrained)
+    else:
+        raise ValueError
+
+    return select_model
 
 def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
     print('==> Epoch:[{0}/{1}][training stage]'.format(_epoch, _nb_epochs))
@@ -80,25 +109,31 @@ def val_1epoch(_model, _val_loader, _criterion, _epoch, _nb_epochs):
 
 
 def main():
+    global args
+    args = parser.parse_args()
+
+    save_path = os.path.join(args.save_root, "spatial_" + args.model)
+    make_save_dir(save_path)
 
     vis = visdom.Visdom()
     loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
     acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
-    loader = data_loader.SpatialDataLoader(BATCH_SIZE=batch_size, num_workers=8,
-                                           path=data_root, txt_path=txt_root, split_num=1)
+    loader = data_loader.SpatialDataLoader(img_size=args.img_size, batch_size=args.batch_size, num_workers=8,
+                                           path=args.data_root, txt_path=args.text_root, split_num=args.split_num)
 
     train_loader, test_loader, test_video = loader.run()
-    # model = Net(channel=3).cuda(device=0)
-    model = torch.load(os.path.join(model_path, '161_epoch_best_model.pth'))
+    model = set_model(args.model, str2bool(args.pretrained))
+    model = model.cuda()
+
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = torch.optim.SGD(model.parameters(), 0.001, momentum=0.9)
-    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
+    optimizer = torch.optim.SGD(model.parameters(), args.learning_rate, momentum=0.9)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=10, verbose=True)
     cur_best_acc = 0
-    for epoch in range(162, nb_epoch+1):
-        train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
+    for epoch in range(1, args.epoch+1):
+        train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, args.epoch)
         print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
-        val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, nb_epoch)
+        val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, args.epoch)
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
 
         # lr scheduler
@@ -107,7 +142,7 @@ def main():
         is_best = val_acc > cur_best_acc
         if is_best:
             cur_best_acc = val_acc
-            with open('./spatial_pred/spatial_video_preds.pickle','wb') as f:
+            with open(os.path.join(save_path,'/spatial_preds.pickle'),'wb') as f:
                 pickle.dump(video_level_pred, f)
             f.close()
 
@@ -119,7 +154,7 @@ def main():
                  win=loss_plot, update="append", name='Validation Loss')
         vis.line(X=np.asarray([epoch]), Y=np.asarray([val_acc]),
                  win=acc_plot, update="append", name="Validation Accuracy")
-        save_best_model(is_best, model, model_path, epoch)
+        save_best_model(is_best, model, save_path, epoch)
 
 
 if __name__ == '__main__':

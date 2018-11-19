@@ -17,7 +17,7 @@ class SpatialDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.mode = mode
-        self.n_label = 51
+        # self.n_label = 51
 
     def __len__(self):
         return len(self.keys)
@@ -92,9 +92,9 @@ class RepresentationDataset(SpatialDataset):
 
 
 class LoaderInit:
-    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num):
+    def __init__(self, batch_size, num_workers, path, txt_path, split_num):
 
-        self.BATCH_SIZE = BATCH_SIZE
+        self.batch_size = batch_size
         self.num_workers = num_workers
         self.data_path = path
         self.text_path = txt_path
@@ -124,11 +124,12 @@ class LoaderInit:
 
 
 class SpatialDataLoader(LoaderInit):
-    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num, is_ae=False):
+    def __init__(self, img_size, batch_size, num_workers, path, txt_path, split_num, is_ae=False):
 
         # super(LoaderInit, self).__init__(BATCH_SIZE, num_workers, path, txt_path, split_num)
-        super().__init__(BATCH_SIZE, num_workers, path, txt_path, split_num)
+        super().__init__(batch_size, num_workers, path, txt_path, split_num)
         # split the training and testing videos
+        self.img_size = img_size
         self.is_ae = is_ae
         self.dic_test_idx = {}
 
@@ -158,7 +159,7 @@ class SpatialDataLoader(LoaderInit):
                                           mode='train',
                                           transform=transforms.Compose([
                                               transforms.Scale([256,256]),
-                                              transforms.RandomCrop(224),
+                                              transforms.RandomCrop(self.img_size),
                                               transforms.RandomHorizontalFlip(),
                                               transforms.ToTensor(),
                                               transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -181,7 +182,7 @@ class SpatialDataLoader(LoaderInit):
 
         train_loader = DataLoader(
             dataset=training_set,
-            batch_size=self.BATCH_SIZE,
+            batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
@@ -195,7 +196,7 @@ class SpatialDataLoader(LoaderInit):
                                         root_dir=self.data_path,
                                         mode='val',
                                         transform=transforms.Compose([
-                                            transforms.Scale([224, 224]),
+                                            transforms.Resize([self.img_size, self.img_size]),
                                             transforms.ToTensor(),
                                             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                         ]))
@@ -204,7 +205,7 @@ class SpatialDataLoader(LoaderInit):
 
         val_loader = DataLoader(
             dataset=validation_set,
-            batch_size=self.BATCH_SIZE,
+            batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers)
 
@@ -212,9 +213,9 @@ class SpatialDataLoader(LoaderInit):
 
 
 class RepresentationLoader(LoaderInit):
-    def __init__(self, BATCH_SIZE, num_workers, path, txt_path, split_num):
+    def __init__(self, batch_size, num_workers, path, txt_path, split_num):
         # super(LoaderInit, self).__init__(BATCH_SIZE, num_workers, path, txt_path, split_num)
-        super().__init__(BATCH_SIZE, num_workers, path, txt_path, split_num)
+        super().__init__(batch_size, num_workers, path, txt_path, split_num)
 
     def run(self):
         represent_set = RepresentationDataset(dic=self.train_video,
@@ -230,7 +231,7 @@ class RepresentationLoader(LoaderInit):
                                               ]))
         loader = DataLoader(
             dataset=represent_set,
-            batch_size=self.BATCH_SIZE,
+            batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers
         )

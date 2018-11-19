@@ -1,105 +1,49 @@
-from torch.autograd import Variable
-import torch.optim as optim
-import torch.nn as nn
 import torch
-import data_loader.spatial_cube_dataloader as data_loader
-import torchvision.transforms as transforms
-# import data_loader.spatial_cube_dataloader as data_loader
-# from util import save_best_model
-import numpy as np
+from torch.autograd import Variable
 import visdom
 import os
+import sys
+import numpy as np
+import argparse
+import torchvision.transforms as transforms
 
-cuda = True if torch.cuda.is_available() else False
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+import data_loader.gan_loader as data_loader
+from network.Gan_3d import *
+from util.util import make_save_dir
 
-# experimental parameters
-# data_root = "/home/jm/Two-stream_data/HMDB51/original/frames"
-data_root = "/home/jm/Two-stream_data/HMDB51/original/flow"
-txt_root = "/home/jm/Two-stream_data/HMDB51"
-save_path = "/home/jm/hdd/temporal_gan_model"
-batch_size = 32
-nb_epoch = 10000
-L = 16
+###################################
+#     argument parser setting     #
+###################################
+parser = argparse.ArgumentParser(description='Pytorch Action Recognition temporal stream')
+parser.add_argument('--data_root', type=str, help="set data root")
+parser.add_argument('--save_root', type=str, default="./")
+parser.add_argument('--img_size', type=int, default=68, help="set train image size")
+parser.add_argument('--stack_size', type=int, default=16, help="set stack size")
+parser.add_argument('--learning_rate','--lr', type=float, default=0.001, help="set train learning rate")
+parser.add_argument('--batch_size', '--bs', type=int, default=4, help="set batch size")
+parser.add_argument('--epoch', type=int, default=10000, help="set train epoch number")
+
 n_class = 51
 
 
-class Generator(nn.Module):
-    def __init__(self):
-        super(Generator, self).__init__()
-
-        self.init_size = 3# 6
-        self.init_channel = 4
-        # self.l1 = nn.Sequential(nn.Linear(5000, 512 * self.init_channel * self.init_size * self.init_size))
-        self.l1 = nn.Sequential(nn.Linear(2048, 512 * self.init_channel * self.init_size * self.init_size))
-        self.conv_blocks = nn.Sequential(
-            nn.ConvTranspose3d(512, 256, kernel_size=3),
-            nn.ReLU(True),
-
-            nn.ConvTranspose3d(256, 256, kernel_size=3),
-            nn.ReLU(True),
-
-            nn.ConvTranspose3d(256, 128, kernel_size=3, stride=(1,2,2)),
-            nn.ReLU(True),
-
-            nn.ConvTranspose3d(128, 64, kernel_size=3, stride=(1,2,2)),
-            nn.ReLU(True),
-
-            # nn.ConvTranspose3d(64, 3, kernel_size=(5, 8, 8), stride=(1,2,2)),
-            nn.ConvTranspose3d(64, 2, kernel_size=(5, 8, 8), stride=(1,2,2)),
-            nn.Tanh()
-        )
-
-    def forward(self, z):
-        out = self.l1(z)
-        out = out.view(out.shape[0], 512, self.init_channel, self.init_size, self.init_size)
-        img = self.conv_blocks(out)
-        return img
-
-
-class Discriminator(nn.Module):
-    def __init__(self):
-        super(Discriminator, self).__init__()
-
-        self.model = nn.Sequential(
-            nn.Conv3d(2, 64, kernel_size=(5,7,7), stride=(1,2,2)),
-            # nn.Conv3d(3, 64, kernel_size=(5,7,7), stride=(1,2,2)),
-            nn.ReLU(),
-
-            nn.Conv3d(64, 128, kernel_size=(3,7,7), stride=(1,2,2)),
-            nn.ReLU(),
-
-            nn.Conv3d(128, 256, kernel_size=(3,5,5), stride=(1,2,2)),
-            nn.ReLU(),
-            nn.Conv3d(256, 256, kernel_size=3),
-            nn.ReLU(),
-
-            nn.Conv3d(256, 512, kernel_size=3),
-            nn.ReLU()
-        )
-
-        # The height and width of downsampled image
-        self.adv_layer = nn.Sequential(# nn.Linear(73728, 1),
-                                       nn.Linear(2048, 1),
-                                       nn.Sigmoid())
-        self.classifer_layer = nn.Sequential(nn.Linear(73728, n_class+1)) # +1 is fake label relate
-
-    def forward(self, img_cube):
-        out = self.model(img_cube)
-        out = out.view(out.size(0), -1)
-        validity = self.adv_layer(out)
-
-        return validity
 
 
 if __name__ == "__main__":
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # loader = data_loader.SpatialCubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
-    #                                            path=data_root, txt_path=txt_root, split_num=1)
-    # train_loader, test_loader, test_video = loader.run()
 
-    loader = data_loader.CubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
-                                        path=data_root, txt_path=txt_root, split_num=1, mode="temporal")
-    train_loader, test_loader, test_video = loader.run()
+    global args
+    args = parser.parse_args()
+
+    save_path = os.path.join(args.save_root, "3d_gan")
+    make_save_dir(save_path)
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    loader = data_loader.CubeDataLoader(img_size=args.img_size,
+                                        batch_size=args.batch_size,
+                                        num_workers=8,
+                                        in_channel=args.stack_size,
+                                        path=args.data_root)
+    train_loader = loader.train()
 
     # visdom init
     vis = visdom.Visdom()
@@ -107,7 +51,7 @@ if __name__ == "__main__":
     acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
     # init discriminator
-    discriminator = Discriminator()
+    discriminator = Discriminator(n_class=n_class, img_channel=2)
     discriminator.train()
     discriminator = discriminator.to(device)
 
@@ -117,16 +61,16 @@ if __name__ == "__main__":
     generator = generator.to(device)
 
     # set optimizer
-    criterion = nn.BCELoss()
-    optimizerD = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.999))
-    optimizerG = optim.Adam(generator.parameters(), lr=0.001, betas=(0.5, 0.999))
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizerD = torch.optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.999))
+    optimizerG = torch.optim.Adam(generator.parameters(), lr=0.001, betas=(0.5, 0.999))
 
     invTrans = transforms.Compose([#transforms.ToTensor(),
                                    transforms.Normalize(mean=[0.,], std=[1/0.5,]),
                                    transforms.Normalize(mean=[-0.5,], std=[1., ])])
 
     prev_err = None
-    for epoch in range(nb_epoch):
+    for epoch in range(1, args.epoch+1):
         generator_error = []
         discriminator_error = []
         for i, (data, label) in enumerate(train_loader):
@@ -135,7 +79,7 @@ if __name__ == "__main__":
             discriminator.zero_grad()
 
             input_var = Variable(data).cuda()
-            target = Variable(torch.ones(input_var.size()[0])).cuda()
+            target = Variable(label).cuda()
             # target = Variable(label).cuda()
             output = discriminator(input_var)
             err_real = criterion(output, target)
@@ -144,8 +88,8 @@ if __name__ == "__main__":
             # noise = Variable(torch.randn(input_var.size()[0], 5000)).cuda()
             noise = Variable(torch.randn(input_var.size()[0], 2048)).cuda()
             fake = generator(noise)
-            # target = Variable(torch.ones(input_var.size()[0])*51).cuda()   # fake data label is 51
-            target = Variable(torch.zeros(input_var.size()[0])).cuda()
+            target = Variable(torch.ones(input_var.size()[0])*51).cuda().long()   # fake data label is 51
+            # target = Variable(torch.zeros(input_var.size()[0])).cuda()
             output = discriminator(fake.detach())
             err_fake = criterion(output, target)
 
@@ -155,14 +99,13 @@ if __name__ == "__main__":
 
             # generator train
             generator.zero_grad()
-            # target = Variable(torch.ones(input_var.size()[0])*51).cuda()
-            target = Variable(torch.ones(input_var.size()[0])).cuda()
+            # target = Variable(torch.ones(input_var.size()[0])).cuda()
             output = discriminator(fake)
             errG = criterion(output, target)
             errG.backward()
             optimizerG.step()
 
-            print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f' % (epoch, nb_epoch, i, len(train_loader), errD.data[0], errG.data[0]))
+            print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f' % (epoch, args.epoch, i, len(train_loader), errD.data[0], errG.data[0]))
             generator_error.append(errG.data[0])
             discriminator_error.append(errD.data[0])
 
@@ -181,11 +124,7 @@ if __name__ == "__main__":
 
         if epoch % 20 == 0 and epoch != 0 :
             torch.save(generator, os.path.join(save_path, '%d_epoch.pkl' %epoch))
-        """
-        if not prev_err or prev_err > generator_model_err:
-            save_best_model(True, generator, save_path, epoch)
-            prev_err = generator_model_err
-        """
+
         vis.line(X=np.asarray([epoch]), Y=np.asarray([generator_error]),
                  win=loss_plot, update="append", name='Train G Loss')
         vis.line(X=np.asarray([epoch]), Y=np.asarray([discriminator_model_err]),

@@ -7,8 +7,8 @@ import torchvision.transforms as transforms
 import torch
 
 
-class motion_dataset(Dataset):
-    def __init__(self, dic, in_channel, root_dir, mode, transform=None):
+class MotionDataset(Dataset):
+    def __init__(self, dic, img_size, in_channel, root_dir, mode, transform=None):
         # Generate a 16 Frame clip
         self.keys = list(dic.keys())
         self.values = list(dic.values())
@@ -16,14 +16,13 @@ class motion_dataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.mode = mode
+        self.img_size = img_size
         self.in_channel = in_channel
-        self.img_rows = 224
-        self.img_cols = 224
 
     def stackopf(self, keys):
         video_path = os.path.join(self.root_dir, keys.split('-')[0])
 
-        flow = torch.FloatTensor(2 * self.in_channel, self.img_rows, self.img_cols)
+        flow = torch.FloatTensor(2 * self.in_channel, self.img_size, self.img_size)
         i = int(self.clips_idx)
 
         for j in range(self.in_channel):
@@ -77,9 +76,10 @@ class motion_dataset(Dataset):
 
 
 class MotionDataLoader():
-    def __init__(self, BATCH_SIZE, num_workers, in_channel, path, txt_path, split_num):
+    def __init__(self, img_size, batch_size, num_workers, in_channel, path, txt_path, split_num):
 
-        self.BATCH_SIZE = BATCH_SIZE
+        self.img_size = img_size
+        self.BATCH_SIZE = batch_size
         self.num_workers = num_workers
         self.in_channel = in_channel
         self.data_path = path
@@ -127,13 +127,12 @@ class MotionDataLoader():
                 self.dic_test_idx[key] = self.test_video[video]
 
     def train(self):
-        training_set = motion_dataset(dic=self.train_video, in_channel=self.in_channel, root_dir=self.data_path,
-                                      mode='train',
-                                      transform=transforms.Compose([
-                                          transforms.Scale([224, 224]),
-                                          # transforms.RandomCrop(224),
-                                          transforms.ToTensor()
-                                      ]))
+        training_set = MotionDataset(dic=self.train_video, in_channel=self.in_channel, root_dir=self.data_path,
+                                     mode='train', img_size=self.img_size,
+                                     transform=transforms.Compose([
+                                         transforms.Resize([self.img_size, self.img_size]),
+                                         transforms.ToTensor()
+                                     ]))
         print('==> Training data :', len(training_set), ' videos', training_set[1][0].size())
 
         train_loader = DataLoader(
@@ -147,12 +146,12 @@ class MotionDataLoader():
         return train_loader
 
     def val(self):
-        validation_set = motion_dataset(dic=self.dic_test_idx, in_channel=self.in_channel, root_dir=self.data_path,
-                                        mode='val',
-                                        transform=transforms.Compose([
-                                            transforms.Scale([224, 224]),
-                                            transforms.ToTensor()
-                                        ]))
+        validation_set = MotionDataset(dic=self.dic_test_idx, in_channel=self.in_channel, root_dir=self.data_path,
+                                       mode='val', img_size=self.img_size,
+                                       transform=transforms.Compose([
+                                           transforms.Resize([self.img_size, self.img_size]),
+                                           transforms.ToTensor()
+                                       ]))
         print('==> Validation data :', len(validation_set), ' frames', validation_set[1][1].size())
         # print validation_set[1]
 

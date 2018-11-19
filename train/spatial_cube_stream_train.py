@@ -1,105 +1,77 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-import visdom
-import numpy as np
-import os
 import pickle
+import visdom
+import os
+import sys
 import copy
-from network import resnet_3d
+import numpy as np
+import argparse
+
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 import data_loader.spatial_cube_dataloader as data_loader
-from util.util import accuracy, frame2_video_level_accuracy, save_best_model
+import network.resnet_3d as resnet
+import network.resnext_3d as resnext
+from util.util import accuracy, frame2_video_level_accuracy, save_best_model, str2bool, make_save_dir
+
+###################################
+#     argument parser setting     #
+###################################
+parser = argparse.ArgumentParser(description='Pytorch Action Recognition temporal stream')
+parser.add_argument('--data_root', type=str, help="set data root")
+parser.add_argument('--text_root', type=str, help="set train test split file root")
+parser.add_argument('--split_num', type=int, choices=[1,2,3], help='set train test split number')
+parser.add_argument('--save_root', type=str, default="./")
+parser.add_argument('--model', type=str, choices=['resnext-101','resnet-101','resnet-152'], help='set model')
+parser.add_argument('--train_type', type=str, choices=['tsn'],
+                    default='tsn', help='set train type tsn or two-stream')
+parser.add_argument('--modality', choices=['rgb', 'flow'], default='rgb', help="select data modality")
+parser.add_argument('--pretrained', type=str, default='true')
+parser.add_argument('--pretrained_root', type=str, help="3d resnet pretrained model root")
+parser.add_argument('--img_size', type=int, default=224, help="set train image size")
+parser.add_argument('--stack_size', type=int, choices=[16,32,64], default=16, help="set stack size")
+parser.add_argument('--learning_rate','--lr', type=float, default=0.001, help="set train learning rate")
+parser.add_argument('--batch_size', '--bs', type=int, default=4, help="set batch size")
+parser.add_argument('--epoch', type=int, default=10000, help="set train epoch number")
 
 
-# experimental parameters
-data_root = "/home/jm/Two-stream_data/HMDB51/original/flow"
-txt_root = "/home/jm/Two-stream_data/HMDB51"
-save_path = "/home/jm/hdd/spatial_cube_model"
-batch_size = 4
-nb_epoch = 10000
-L = 16# 32
-n_class = 51
-mode = 'temporal'
 
-# C3D Model
-class C3D(nn.Module):
-    def __init__(self):
-        super(C3D, self).__init__()
-        self.group1 = nn.Sequential(
-            nn.Conv3d(3, 64, kernel_size=5, padding=1),
-            nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2)))
-        #init.xavier_normal(self.group1.state_dict()['weight'])
-        self.group2 = nn.Sequential(
-            nn.Conv3d(64, 128, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)))
-        #init.xavier_normal(self.group2.state_dict()['weight'])
-        self.group3 = nn.Sequential(
-            nn.Conv3d(128, 256, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv3d(256, 256, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)))
-        #init.xavier_normal(self.group3.state_dict()['weight'])
-        self.group4 = nn.Sequential(
-            nn.Conv3d(256, 512, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv3d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)))
-        #init.xavier_normal(self.group4.state_dict()['weight'])
-        self.group5 = nn.Sequential(
-            nn.Conv3d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv3d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)))
-        #init.xavier_normal(self.group5.state_dict()['weight'])
+def set_model(model_name, img_size, stack_size, pretrained, pretrained_root):
 
-        self.fc1 = nn.Sequential(
-            nn.Linear(86528, 2048),               #
-            nn.ReLU(),
-            nn.Dropout(0.5))
-        #init.xavier_normal(self.fc1.state_dict()['weight'])
-        self.fc2 = nn.Sequential(
-            nn.Linear(2048, 2048),
-            nn.ReLU(),
-            nn.Dropout(0.5))
-        #init.xavier_normal(self.fc2.state_dict()['weight'])
-        self.fc3 = nn.Sequential(
-            nn.Linear(2048, 51), #101
-            nn.Softmax()
-        )
+    if model_name == 'resnet-101':
+        select_model = resnet.resnet101(sample_size=img_size, sample_duration=stack_size)
+    elif model_name == 'resnet-152':
+        select_model = resnet.resnet152(sample_size=img_size, sample_duration=stack_size)
+    elif model_name == 'resnext-101':
+        select_model = resnext.resnet101(sample_size=img_size, sample_duration=stack_size)
 
-        self._features = nn.Sequential(
-            self.group1,
-            self.group2,
-            self.group3,
-            self.group4
-            # self.group5
-        )
+    else:
+        raise ValueError
 
-        self._classifier = nn.Sequential(
-            self.fc1,
-            self.fc2
-        )
+    if pretrained:
+        if model_name=='resnext-101' and stack_size == 64:
+            state_dict = torch.load(os.path.join(pretrained_root, model_name+'-64f-kinetics.pth'))
+        else:
+            state_dict = torch.load(os.path.join(pretrained_root, model_name + '-kinetics.pth'))
+        state_dict = refine_state_dict(state_dict)
+        select_model.load_state_dict(state_dict['state_dict'])
 
-    def forward(self, x):
-        out = self._features(x)
-        # print(out.size())
-        out = out.view(out.size(0), -1)
-        # print(out.size())
-        out = self._classifier(out)
-        return self.fc3(out)
+    in_feature = select_model.fc.in_features
+    select_model.fc = nn.Linear(in_feature, 51)
 
-    def num_flat_features(self, x):
-        size = x.size()[1:]  # all dimensions except the batch dimension
-        num_features = 1
-        for s in size:
-            num_features *= s
-        return num_features
+    return select_model
+
+def refine_state_dict(state_dict):
+    # this code is pretrained model load code
+    new_state_dict = copy.deepcopy(state_dict)
+    for key in state_dict['state_dict'].keys():
+        new_key = key.split('.', 1)[1]
+        new_state_dict['state_dict'][new_key] = state_dict['state_dict'][key]
+        del new_state_dict['state_dict'][key]
+
+    return new_state_dict
+
 
 def train_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_epochs):
     print('==> Epoch:[{0}/{1}][training stage]'.format(_epoch, _nb_epochs))
@@ -134,13 +106,12 @@ def train_tsn_1epoch(_model, _train_loader, _optimizer, _loss_func, _epoch, _nb_
     accuracy_list = []
     loss_list = []
     _model.train()
+
     for i, (data, label) in enumerate(_train_loader):
         label = label.cuda()
         # input_var = Variable(data).cuda()
         target_var = Variable(label).cuda().long()
 
-        loss = 0
-        prec = 0
         for i, dat in enumerate(data):
             input_var = Variable(dat).cuda()
             if i == 0:
@@ -194,6 +165,12 @@ def val_1epoch(_model, _val_loader, _criterion, _epoch, _nb_epochs):
     return video_acc, video_loss, dic_video_level_preds
 
 def main():
+    global args
+    args = parser.parse_args()
+
+    save_path = os.path.join(args.save_root, "3d_spatial" + args.model)
+    make_save_dir(save_path)
+
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     vis = visdom.Visdom()
     train_acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
@@ -201,83 +178,55 @@ def main():
     val_loss_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
     val_acc_plot = vis.line(X=np.asarray([0]), Y=np.asarray([0]))
 
-    if not os.path.isdir(save_path):
-        os.makedirs(save_path)
-    """
-    loader = data_loader.CubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
-                                        path=data_root, txt_path=txt_root, split_num=1,mode='spatial')
-    """
-    loader = data_loader.CubeDataLoader(BATCH_SIZE=batch_size, num_workers=8, in_channel=L,
-                                        path=data_root, txt_path=txt_root, split_num=1, mode=mode)
+    loader = data_loader.CubeDataLoader(img_size = args.img_size,
+                                        batch_size=args.batch_size,
+                                        num_workers=8,
+                                        in_channel=args.stack_size,
+                                        path=args.data_root,
+                                        txt_path=args.text_root,
+                                        split_num=args.split_num,
+                                        train_type=args.train_type,
+                                        modality=args.modality)
     train_loader, test_loader, test_video = loader.run()
 
-    # model = resnet_3d.resnet18(sample_size=112, sample_duration=L)
-    # model = resnet_3d.resnet34(sample_size=112, sample_duration=32)
-    state_dict = torch.load(os.path.join(save_path, "resnet-101-kinetics-hmdb51_split1.pth"))
 
-    model = resnet_3d.resnet101(sample_size=224, sample_duration=L, num_classes=n_class)
-    model.conv1 = nn.Conv3d(
-            2,
-            64,
-            kernel_size=7,
-            stride=(1, 2, 2),
-            padding=(3, 3, 3),
-            bias=False)
+    # state_dict = torch.load(os.path.join(save_path, "resnet-101-kinetics-hmdb51_split1.pth"))
+    model = set_model(args.model, args.img_size, args.stack_size, str2bool(args.pretrained), args.pretrained_root)
+    # model = model.cuda()
 
-    """
-    model = resnet_3d.resnet152(sample_size=108, sample_duration=L, num_classes=51)
-
-    model.fc.out_features = n_class
-    """
-
-    """
-    # this code is pretrained model load code
-    new_state_dict = copy.deepcopy(state_dict)
-    for key in state_dict['state_dict'].keys():
-        new_key = key.split('.', 1)[1]
-        new_state_dict['state_dict'][new_key] = state_dict['state_dict'][key]
-        del new_state_dict['state_dict'][key]
-    del state_dict
-    
-    model.load_state_dict(new_state_dict['state_dict'])
-    """
-
-    """
-    # parameters = resnet_3d.get_fine_tuning_parameters(model, 2)
-
-    # modified
-    in_feature = model.fc.in_features
-    model.fc = nn.Sequential(
-        nn.Linear(in_feature, n_class),
-        nn.Softmax()
-    )
-    """
-
+    if args.modality == 'flow':
+        model.conv1 = nn.Conv3d(
+                2,
+                64,
+                kernel_size=7,
+                stride=(1, 2, 2),
+                padding=(3, 3, 3),
+                bias=False)
 
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=1e-3)
-    # optimizer = torch.optim.SGD(parameters, lr=0.001)
-    # scheduler = ReduceLROnPlateau(optimizer, 'min', patience=1, verbose=True)
-
+    optimizer = torch.optim.Adam(model.parameters(), betas=(0.5,0.999), lr=args.learning_rate)
     model = model.to(device)
     cur_best_acc = 0
 
-    model = torch.nn.DataParallel(model, device_ids=[0,1])
+    # multi gpu
+    # model = torch.nn.DataParallel(model, device_ids=[0,1])
 
-    for epoch in range(nb_epoch+1):
-        # train_acc, train_loss, model = train_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
-        train_acc, train_loss, model = train_tsn_1epoch(model, train_loader, optimizer, criterion, epoch, nb_epoch)
+    for epoch in range(1, args.epoch+1):
+        if args.train_type == 'tsn':
+            train_acc, train_loss, model = \
+                train_tsn_1epoch(model, train_loader, optimizer, criterion, epoch, args.epoch)
+        elif args.train_type == 'two-stream':
+            train_acc, train_loss, model = \
+                train_1epoch(model, train_loader, optimizer, criterion, epoch, args.epoch)
+
         print("Train Accuacy:", train_acc, "Train Loss:", train_loss)
-        val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, nb_epoch)
+        val_acc, val_loss, video_level_pred = val_1epoch(model, test_loader, criterion, epoch, args.epoch)
         print("Validation Accuracy:", val_acc, "Validation Loss:", val_loss)
-
-        # lr scheduler
-        # scheduler.step(val_loss)
 
         is_best = val_acc > cur_best_acc
         if is_best:
             cur_best_acc = val_acc
-            with open('../spatial_cube_model/spatial_cube_preds.pickle', 'wb') as f:
+            with open(os.path.join(save_path,'3d_spatial_preds.pickle'), 'wb') as f:
                 pickle.dump(video_level_pred, f)
             f.close()
 

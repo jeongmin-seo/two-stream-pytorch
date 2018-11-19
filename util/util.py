@@ -103,3 +103,17 @@ def record_info(info, filename, mode):
         df.to_csv(filename, index=False, columns=column_names)
     else:  # else it exists so append without writing the header
         df.to_csv(filename, mode='a', header=False, index=False, columns=column_names)
+
+def str2bool(bool_str):
+    if bool_str.lower() == 'true':
+        return True
+    elif bool_str.lower() == 'false':
+        return False
+    else:
+        raise ValueError
+
+def make_save_dir(save_dir):
+    if not os.path.isdir(save_dir):
+        os.mkdir(save_dir)
+    else:
+        pass
